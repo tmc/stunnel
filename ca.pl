@@ -1,12 +1,12 @@
 #!/usr/bin/perl
 
-$config   = "/tmp/ssl/openssl.cnf";
-$capath   = "/usr/local/ssl/bin/openssl ca";
-$certpass = "adas";
+$config   = "/var/openssl/openssl.cnf";
+$capath   = "/usr/bin/openssl ca";
+$certpass = "mypassword";
 $tempca   = "/tmp/ssl/cli".rand 10000;
 $tempout  = "/tmp/ssl/certtmp".rand 10000;
-$caout    = "/tmp/ssl/certwynik.txt";
-$CAcert   = "/tmp/ssl/demoCA/cacert.pem";
+$caout    = "/tmp/ssl/certout.txt";
+$CAcert   = "/var/openssl/localCA/cacert.pem";
 $spkac	  = "";
 
 &ReadForm;
@@ -25,14 +25,14 @@ close(TEMPCE);
 
 system("$capath -batch -config $config -spkac $tempca -out $tempout -key $certpass -cert $CAcert>> $caout 2>&1"); 
 open(CERT,"$tempout") || die &Error;
-@certyfikat = <CERT>;
+@certificate = <CERT>;
 close(CERT);
 
 #system("rm -f $tempca");
 #system("rm -f $tempout");
 
 print "Content-type: application/x-x509-user-cert\n\n";
-print @certyfikat;
+print @certificate;
 
 ##############################################################
 ####
