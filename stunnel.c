@@ -256,7 +256,7 @@ static void create_pid() {
 #ifdef HAVE_SNPRINTF
         snprintf(options.pidfile, STRLEN,
             "%s/stunnel.%s.pid", tmpdir, options.servname);
-#else
+#else /* No data from network here.  Am I paranoid? */
         safecopy(options.pidfile, tmpdir);
         safeconcat(options.pidfile, "/stunnel.");
         safeconcat(options.pidfile, options.servname);
@@ -473,7 +473,7 @@ int auth_user(struct sockaddr_in *addr) {
     struct sockaddr_in ident; /* IDENT socket name */
     int s;                    /* IDENT socket descriptor */
     char buff[STRLEN], name[STRLEN];
-    int ptr, len;
+    int ptr, len, retval;
 
     if(!options.username)
         return 0; /* -u option not specified */
@@ -496,10 +496,11 @@ int auth_user(struct sockaddr_in *addr) {
     }
 #ifdef HAVE_SNPRINTF
     len=snprintf(buff, STRLEN,
+        "%u , %u\r\n", ntohs(addr->sin_port), ntohs(options.localport));
 #else
     len=sprintf(buff,
-#endif
         "%u , %u\r\n", ntohs(addr->sin_port), ntohs(options.localport));
+#endif
     len=writesocket(s, buff, len);
     if(len<0) {
         sockerror("writesocket (ident)");
@@ -522,10 +523,10 @@ int auth_user(struct sockaddr_in *addr) {
         log(LOG_ERR, "Incorrect data from inetd server");
         return -1;
     }
+    retval=strcmp(name, options.username) ? -1 : 0;
+    safestring(name);
     log(LOG_INFO, "IDENT resolved remote user to %s", name);
-    if(strcmp(name, options.username))
-        return -1;
-    return 0;
+    return retval;
 }
 
 #ifndef USE_WIN32

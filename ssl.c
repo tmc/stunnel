@@ -107,16 +107,16 @@ static unsigned char *sid_ctx=(unsigned char *)"stunnel SID";
 int prng_seeded( int bytes ) {
 #if SSLEAY_VERSION_NUMBER >= 0x0090581fL
     if ( RAND_status() ) {
-    	log(LOG_DEBUG, "RAND_status claims sufficient entropy for the PRNG");
-	return(1);
+            log(LOG_DEBUG, "RAND_status claims sufficient entropy for the PRNG");
+        return(1);
     }
 #else
     if ( bytes >= options.random_bytes ) {
-    	log(LOG_INFO, "Sufficient entropy in PRNG assumed (>= %d)", options.random_bytes);
-	return(1);
+            log(LOG_INFO, "Sufficient entropy in PRNG assumed (>= %d)", options.random_bytes);
+        return(1);
     }
 #endif
-    return(0);	/* assume we don't have enough */
+    return(0);        /* assume we don't have enough */
 }
 
 int add_rand_file( char *filename ) {
@@ -127,20 +127,20 @@ int add_rand_file( char *filename ) {
     if ( stat(filename, &sb) !=0 ) { return(0); }
 
     if ( (readbytes = RAND_load_file(filename, options.random_bytes )) ) {
-	log(LOG_DEBUG, "Snagged %d random bytes from %s", readbytes, filename);
+        log(LOG_DEBUG, "Snagged %d random bytes from %s", readbytes, filename);
     } else {
-	log(LOG_INFO, "Unable to retrieve any random data from %s", filename);
+        log(LOG_INFO, "Unable to retrieve any random data from %s", filename);
     }
 
     /* Write new random data for future seeding if it's a regular file */
     if ( options.rand_write && (sb.st_mode & S_IFREG) ) {
-	writebytes = RAND_write_file(filename);
-    	if ( -1 == writebytes ) {
-		log(LOG_WARNING, "Failed to write strong random data to %s.  May "
-			"be a permissions or seeding problem", filename);
-	} else {
-		log(LOG_DEBUG, "Wrote %d new random bytes to %s", writebytes, filename);
-	}
+        writebytes = RAND_write_file(filename);
+            if ( -1 == writebytes ) {
+                log(LOG_WARNING, "Failed to write strong random data to %s.  May "
+                        "be a permissions or seeding problem", filename);
+        } else {
+                log(LOG_DEBUG, "Wrote %d new random bytes to %s", writebytes, filename);
+        }
     }
     return(readbytes);
 }
@@ -156,17 +156,17 @@ void initialize_prng( void ) {
     /* If they specify a rand file on the command line we
        assume that they really do want it, so try it first */
     if ( options.rand_file ) {
-    	totbytes += add_rand_file(options.rand_file);
-	if ( prng_seeded(totbytes) ) { goto SEEDED; }
+            totbytes += add_rand_file(options.rand_file);
+        if ( prng_seeded(totbytes) ) { goto SEEDED; }
     }
     /* Yes.  goto.  Deal with it. */
 
     /* try the $RANDFILE or $HOME/.rnd files */
     RAND_file_name(filename, STRLEN);
     if ( filename[0] ) {
-        filename[STRLEN-1]='\0';	/* just in case */
-    	totbytes += add_rand_file(filename);
-	if ( prng_seeded(totbytes) ) { goto SEEDED; }
+        filename[STRLEN-1]='\0';        /* just in case */
+            totbytes += add_rand_file(filename);
+        if ( prng_seeded(totbytes) ) { goto SEEDED; }
     }
 
 #ifdef RANDOM_FILE
@@ -178,7 +178,7 @@ void initialize_prng( void ) {
     RAND_screen();
     if ( prng_seeded(totbytes) ) {
         log(LOG_DEBUG, "Seeded PRNG with RAND_screen");
-	goto SEEDED;
+        goto SEEDED;
     } else {
         log(LOG_DEBUG, "RAND_screen failed to sufficiently seed PRNG");
     }
@@ -188,23 +188,23 @@ void initialize_prng( void ) {
     if ( options.egd_sock ) {
         if ( (bytes=RAND_egd(options.egd_sock)) == -1 ) {
             log(LOG_WARNING, "EGD Socket %s failed", options.egd_sock);
-	    bytes=0;
+            bytes=0;
         } else {
-	    totbytes += bytes;
+            totbytes += bytes;
             log(LOG_DEBUG, "Snagged %d random bytes from EGD Socket %s",
                 bytes, options.egd_sock);
-	    goto SEEDED;  /* openssl always gets what it needs or fails,
-	    		     so no need to check if seeded sufficiently */
+            goto SEEDED;  /* openssl always gets what it needs or fails,
+                                 so no need to check if seeded sufficiently */
         }
     }
 #ifdef EGD_SOCKET
     if ( (bytes=RAND_egd( EGD_SOCKET )) == -1 ) {
         log(LOG_WARNING, "EGD Socket %s failed", EGD_SOCKET);
     } else {
-	totbytes += bytes;
+        totbytes += bytes;
         log(LOG_DEBUG, "Snagged %d random bytes from EGD Socket %s",
                 bytes, EGD_SOCKET);
-	goto SEEDED; /* ditto */
+        goto SEEDED; /* ditto */
     }
 #endif /* EGD_SOCKET */
 
@@ -226,16 +226,16 @@ SEEDED:
 }
 
 void verify_info() {
-	/*
-	STACK_OF(X509_NAME) *stack;
-	X509_STORE *store;
+        /*
+        STACK_OF(X509_NAME) *stack;
+        X509_STORE *store;
 
-	stack= SSL_CTX_get_client_CA_list(ctx);
-	log(LOG_DEBUG, "there are %d CA_list things", sk_X509_NAME_num(stack));
+        stack= SSL_CTX_get_client_CA_list(ctx);
+        log(LOG_DEBUG, "there are %d CA_list things", sk_X509_NAME_num(stack));
 
-	store=SSL_CTX_get_cert_store(ctx);
-	log(LOG_DEBUG, "it's a %p", store);
-	*/
+        store=SSL_CTX_get_cert_store(ctx);
+        log(LOG_DEBUG, "it's a %p", store);
+        */
 }
 
 void context_init() { /* init SSL */
@@ -307,61 +307,61 @@ dh_done:
             exit(1);
         }
 #endif /* NO_RSA */
-	if(!SSL_CTX_check_private_key(ctx)) {
-	    sslerror("Private key does not match the certificate");
-	    exit(1);
-	}
+        if(!SSL_CTX_check_private_key(ctx)) {
+            sslerror("Private key does not match the certificate");
+            exit(1);
+        }
     }
     if(options.verify_level!=SSL_VERIFY_NONE) {
 
-	log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
-	log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
-	log(LOG_DEBUG, "cert_file is %s", options.cert_file);
-	if ( options.cert_defaults & SSL_CERT_DEFAULTS ) {
-		log(LOG_DEBUG, "Initializing SSL library verify paths");
-		if ((!SSL_CTX_set_default_verify_paths(ctx))) {
-		    sslerror("X509_set_default_verify_paths");
-		    exit(1);
-		}
-	}
+        log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
+        log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
+        log(LOG_DEBUG, "cert_file is %s", options.cert_file);
+        if ( options.cert_defaults & SSL_CERT_DEFAULTS ) {
+                log(LOG_DEBUG, "Initializing SSL library verify paths");
+                if ((!SSL_CTX_set_default_verify_paths(ctx))) {
+                    sslerror("X509_set_default_verify_paths");
+                    exit(1);
+                }
+        }
 
-	/* put in defaults (if not set on cmd line) if -S says to */
-	if ( options.cert_defaults & STUNNEL_CERT_DEFAULTS ) {
-		log(LOG_DEBUG, "installing defaults where not set");
-		if ( ! options.cert_file[0] )
-			safecopy(options.cert_file, CERT_FILE);
-		if ( ! options.cert_dir[0] )
-			safecopy(options.cert_dir, CERT_DIR);
-	}
-	if ( options.cert_file[0] ) {
-	    if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,NULL)) {
-		log(LOG_ERR, "Error loading verify certificates from %s",
-		    options.cert_file);
-		sslerror("SSL_CTX_load_verify_locations");
-		exit(1);
-	    }
+        /* put in defaults (if not set on cmd line) if -S says to */
+        if ( options.cert_defaults & STUNNEL_CERT_DEFAULTS ) {
+                log(LOG_DEBUG, "installing defaults where not set");
+                if ( ! options.cert_file[0] )
+                        safecopy(options.cert_file, CERT_FILE);
+                if ( ! options.cert_dir[0] )
+                        safecopy(options.cert_dir, CERT_DIR);
+        }
+        if ( options.cert_file[0] ) {
+            if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,NULL)) {
+                log(LOG_ERR, "Error loading verify certificates from %s",
+                    options.cert_file);
+                sslerror("SSL_CTX_load_verify_locations");
+                exit(1);
+            }
             SSL_CTX_set_client_CA_list(ctx,
-		SSL_load_client_CA_file(options.cert_file));
-	    log(LOG_DEBUG, "Loaded verify certificates from %s",
-		options.cert_file);
-	}
-	if ( options.cert_dir[0] ) {
-	    if (!SSL_CTX_load_verify_locations(ctx,NULL ,options.cert_dir)) {
-		log(LOG_ERR, "Error setting verify directory to %s",
-		    options.cert_dir);
-		sslerror("SSL_CTX_load_verify_locations");
-		exit(1);
-	    }
-	    log(LOG_DEBUG, "Set verify directory to %s", options.cert_dir);
-	}
+                SSL_load_client_CA_file(options.cert_file));
+            log(LOG_DEBUG, "Loaded verify certificates from %s",
+                options.cert_file);
+        }
+        if ( options.cert_dir[0] ) {
+            if (!SSL_CTX_load_verify_locations(ctx,NULL ,options.cert_dir)) {
+                log(LOG_ERR, "Error setting verify directory to %s",
+                    options.cert_dir);
+                sslerror("SSL_CTX_load_verify_locations");
+                exit(1);
+            }
+            log(LOG_DEBUG, "Set verify directory to %s", options.cert_dir);
+        }
 
         /*
-	if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,
-		options.cert_dir)) {
+        if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,
+                options.cert_dir)) {
             sslerror("X509_load_verify_locations");
             exit(1);
         }
-	*/
+        */
 
         SSL_CTX_set_verify(ctx, options.verify_level, verify_callback);
 
@@ -480,10 +480,10 @@ void client(int local) {
     SSL_set_session_id_context(ssl, sid_ctx, strlen(sid_ctx));
 #endif
     if(options.option&OPT_CLIENT) {
-	/* Attempt to use the most recent id in the session cache */
-	if ( ctx->session_cache_head )
-	    if ( ! SSL_set_session(ssl, ctx->session_cache_head) )
-		log(LOG_WARNING, "Cannot set SSL session id to most recent used");
+        /* Attempt to use the most recent id in the session cache */
+        if ( ctx->session_cache_head )
+            if ( ! SSL_set_session(ssl, ctx->session_cache_head) )
+                log(LOG_WARNING, "Cannot set SSL session id to most recent used");
         SSL_set_fd(ssl, remote);
         SSL_set_connect_state(ssl);
         if(SSL_connect(ssl)<=0) {

@@ -899,7 +899,7 @@ else
 fi
 
 
-VERSION="3.20pre2"
+VERSION="3.20pre3"
 
 cat >> confdefs.h <<EOF
 #define VERSION "$VERSION"

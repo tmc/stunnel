@@ -2,6 +2,7 @@ stunnel         Universal SSL tunnel
 
 Version 3.20, 2001.08.xx, urgency: LOW:
 * Minor bugfixes in client() and transfer() functions.
+* setsockopt() Solaris parameter problem fixed.
 
 Version 3.19, 2001.08.10, urgency: MEDIUM:
 * Critical section added around non MT-safe TCP Wrappers code.

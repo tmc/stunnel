@@ -38,7 +38,6 @@ static void host2num(u32 **hostlist, char *hostname);
 #ifndef HAVE_GETOPT
 static int getopt(int argc, char **argv, char *options);
 #endif
-static void safestring(char *string);
 static void alloc(u32 **ptr, int len);
 static int parse_debug_level(char *optarg);
 static int print_socket_options();
@@ -492,13 +491,6 @@ static int getopt(int argc, char **argv, char *options) {
     return optopt;
 }
 #endif /* !defined HAVE_GETOPT */
-
-static void safestring(char *string) {
-        /* change all unsafe characters to '.' */
-    for(; *string; string++)
-        if(!isalnum((unsigned char)*string))
-            *string='.';
-}
 
 static void alloc(u32 **ptr, int len) {
         /* Allocate len+1 words terminated with -1 */
