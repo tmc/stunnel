@@ -1,5 +1,9 @@
 stunnel         Universal SSL tunnel
 
+3.4a 1999.07.13	(bugfix release)
+		Problem with cipher negotiation fixed.
+                setenv changed to putenv.
+
 3.4 1999.07.12	Local transparent proxy added with LD_PRELOADed shared library.
 		DH code rewritten.
 		Added -C option to set cipher list.

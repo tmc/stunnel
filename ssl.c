@@ -176,9 +176,9 @@ void context_init() /* init SSL */
     SSLeay_add_ssl_algorithms();
     SSL_load_error_strings();
     if(options.option&OPT_CLIENT) {
-        ctx=SSL_CTX_new(TLSv1_client_method());
+        ctx=SSL_CTX_new(SSLv3_client_method());
     } else { /* Server mode */
-        ctx=SSL_CTX_new(TLSv1_server_method());
+        ctx=SSL_CTX_new(SSLv23_server_method());
 #ifndef NO_RSA
         log(LOG_DEBUG, "Generating %d bit temporary RSA key...", KEYLENGTH);
 #if SSLEAY_VERSION_NUMBER <= 0x0800

@@ -28,7 +28,7 @@
 
 #ifdef USE_WIN32
 
-#define VERSION "3.3"
+#define VERSION "3.4a"
 #define HOST "i586-pc-mingw32-gnu"
 
 #define HAVE_VSNPRINTF

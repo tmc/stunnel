@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-1999 Michal Trojnara <Michal.Trojnara@centertel.pl>
  *                 All Rights Reserved
  *
- *   Version:      3.4              (stunnel.c)
- *   Date:         1999.07.12
+ *   Version:      3.4a             (stunnel.c)
+ *   Date:         1999.07.13
  *   Author:       Michal Trojnara  <Michal.Trojnara@centertel.pl>
  *   SSL support:  Adam Hernik      <adas@infocentrum.com>
  *                 Pawel Krawczyk   <kravietz@ceti.com.pl>
@@ -140,6 +140,8 @@ server_options options;
 /* Safe copy for strings declarated as char[STRLEN] */
 #define safecopy(dst, src) \
     (dst[STRLEN-1]='\0', strncpy((dst), (src), STRLEN-1))
+#define safeconcat(dst, src) \
+    (dst[STRLEN-1]='\0', strncat((dst), (src), STRLEN-strlen(dst)-1))
 
     /* Functions */
 int main(int argc, char* argv[])
@@ -476,6 +478,7 @@ int connect_local(u_long ip) /* connect to local host */
 #else
     int fd[2];
     struct in_addr addr;
+    char text[STRLEN];
 
     if(make_sockets(fd))
         return -1;
@@ -494,9 +497,11 @@ int connect_local(u_long ip) /* connect to local host */
             dup2(fd[1], 2);
         closesocket(fd[1]);
         if(ip) {
-            setenv("LD_PRELOAD", libdir "/stunnel.so", 1);
+            putenv("LD_PRELOAD=" libdir "/stunnel.so");
             addr.s_addr=ip;
-            setenv("REMOTE_HOST", inet_ntoa(addr), 1);
+            safecopy(text, "REMOTE_HOST=");
+            safeconcat(text, inet_ntoa(addr));
+            putenv(text);
         }
         execvp(options.execname, options.execargs);
         ioerror("execvp"); /* execvp failed */

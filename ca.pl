@@ -9,9 +9,6 @@ $caout    = "/tmp/ssl/certwynik.txt";
 $CAcert   = "/tmp/ssl/demoCA/cacert.pem";
 $spkac	  = "";
 
-
-
-
 &ReadForm;
 
 $spkac = $FIELDS{'SPKAC'};
@@ -37,15 +34,10 @@ close(CERT);
 print "Content-type: application/x-x509-user-cert\n\n";
 print @certyfikat;
 
-
-
-
-
 ##############################################################
 ####
-####     Procedury 
+####     Procedures
 ####
-
 
 sub ReadForm {
 
@@ -54,30 +46,20 @@ sub ReadForm {
    }
    elsif ($ENV{'REQUEST_METHOD'} eq 'POST') {
       read(STDIN, $buffer, $ENV{'CONTENT_LENGTH'});
-
       @pairs = split(/&/, $buffer);
    }
-  
    foreach $pair (@pairs) {
       ($name, $value) = split(/=/, $pair);
-
       $name =~ tr/+/ /;
       $name =~ s/%([a-fA-F0-9][a-fA-F0-9])/pack("C", hex($1))/eg;
-
       $value =~ tr/+/ /;
       $value =~ s/%([a-fA-F0-9][a-fA-F0-9])/pack("C", hex($1))/eg;
-
       $value =~ s/<!--(.|\n)*-->//g;
-
       $FIELDS{$name} = $value;
-      
       }
- 
 }
 
 sub Error {
-
     print "Content-type: text/html\n\n";
     print "<P><P><center><H1>Cant open file</H1></center>\n";
-
 }
