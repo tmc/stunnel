@@ -432,7 +432,7 @@ static u_short port2num(char *portname) { /* get port number */
     if((p=getservbyname(portname, "tcp")))
         port=p->s_port;
     else
-        port=htons(atoi(portname));
+        port=htons((u_short)atoi(portname));
     if(!port) {
         log(LOG_ERR, "Invalid port: %s", portname);
         exit(2);
@@ -684,6 +684,7 @@ static void print_option(int type, opt_union *val) {
         fprintf(stderr, "%10s", val->c_val);
         break;
     default:
+        break;
     }
 }
 
@@ -749,6 +750,7 @@ static int parse_socket_option(char *optarg) {
         strcpy(ptr->opt_val[socket_type]->c_val, opt_val_str);
         return 1; /* OK */
     default:
+        break;
     }
     return 0; /* FAILED */
 }

@@ -77,13 +77,14 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned long u32;
-typedef unsigned long long u64;
+typedef unsigned __int64 u64;
 
 #define HAVE_VSNPRINTF
 #define vsnprintf _vsnprintf
 /*  Already defined for mingw, perhaps others
 int _vsnprintf(char *, int, char *, ...);
 */
+#define strcasecmp _stricmp
 
 #define get_last_socket_error() WSAGetLastError()
 #define get_last_error()        GetLastError()
@@ -236,11 +237,15 @@ void sockerror(char *);
 int connect_local(u32);
 int connect_remote(u32);
 int set_socket_options(int, int);
+int auth_user(struct sockaddr_in *);
 
 /* Prototypes for ssl.c */
 
 void context_init();
 void context_free();
+void sslerror(char *);
+
+/* Prototypes for ssl.c */
 void client(int);
 
 /* Prototypes for protocol.c */
@@ -255,8 +260,12 @@ void log(int, char *, ...);
 
 /* Prototypes for sthreads.c */
 
-void enter_critical_section(int);
-void leave_critical_section(int);
+typedef enum {
+    CRIT_KEYGEN, CRIT_LIBWRAP, CRIT_NTOA, CRIT_CLIENTS, CRIT_SECTIONS
+} section_code;
+
+void enter_critical_section(section_code);
+void leave_critical_section(section_code);
 void sthreads_init(void);
 unsigned long process_id(void);
 unsigned long thread_id(void);

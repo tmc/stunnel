@@ -113,7 +113,7 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
     /* check if started from inetd */
     context_init(); /* initialize global SSL context */
     sthreads_init(); /* initialize threads */
-    log(LOG_NOTICE, STUNNEL_INFO);
+    log(LOG_NOTICE, "%s", STUNNEL_INFO);
     if (options.option & OPT_DAEMON) {
         /* client or server, daemon mode */
 #ifndef USE_WIN32
@@ -169,24 +169,24 @@ static void daemon_loop() {
         }
         if(options.clients<MAX_CLIENTS) {
             if(create_client(ls, s, client)) {
-                enter_critical_section(4); /* inet_ntoa is not mt-safe */
+                enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
                 log(LOG_WARNING,
                     "%s create_client failed - connection from %s:%d REJECTED",
                     options.servname,
                     inet_ntoa(addr.sin_addr),
                     ntohs(addr.sin_port));
-                leave_critical_section(4);
+                leave_critical_section(CRIT_NTOA);
             } else {
-                enter_critical_section(2); /* for multi-cpu machines */
+                enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
                 options.clients++;
-                leave_critical_section(2);
+                leave_critical_section(CRIT_CLIENTS);
             }
         } else {
-            enter_critical_section(4); /* inet_ntoa is not mt-safe */
+            enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
             log(LOG_WARNING,
                 "%s has too many clients - connection from %s:%d REJECTED",
                 options.servname, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-            leave_critical_section(4);
+            leave_critical_section(CRIT_NTOA);
             closesocket(s);
         }
     }
@@ -312,10 +312,10 @@ static int listen_local() { /* bind and listen on local interface */
         sockerror("bind");
         exit(1);
     }
-    enter_critical_section(4); /* inet_ntoa is not mt-safe */
+    enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
     log(LOG_DEBUG, "%s bound to %s:%d", options.servname,
         inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-    leave_critical_section(4);
+    leave_critical_section(CRIT_NTOA);
     if(listen(ls, 5)) {
         sockerror("listen");
         exit(1);
@@ -415,9 +415,9 @@ int connect_local(u32 ip) { /* spawn local process */
             putenv("_RLD_LIST=" libdir "/stunnel.so:DEFAULT");
             addr.s_addr = ip;
             safecopy(text, "REMOTE_HOST=");
-            enter_critical_section(4); /* inet_ntoa is not mt-safe */
+            enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
             safeconcat(text, inet_ntoa(addr));
-            leave_critical_section(4);
+            leave_critical_section(CRIT_NTOA);
             putenv(text);
         }
         execvp(options.execname, options.execargs);
@@ -457,10 +457,10 @@ int connect_remote(u32 ip) { /* connect to remote host */
     /* connect each host from the list*/
     for(list=options.remotenames; *list!=-1; list++) {
         addr.sin_addr.s_addr=*list;
-        enter_critical_section(4); /* inet_ntoa is not mt-safe */
+        enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
         log(LOG_DEBUG, "%s connecting %s:%d", options.servname,
             inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-        leave_critical_section(4);
+        leave_critical_section(CRIT_NTOA);
         if(!connect(s, (struct sockaddr *) &addr, sizeof(addr)))
             return s; /* success */
     }
