@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-2001 Michal Trojnara <Michal.Trojnara@mirt.net>
  *                 All Rights Reserved
  *
- *   Version:      3.19                  (stunnel.c)
- *   Date:         2001.08.10
+ *   Version:      3.20                  (stunnel.c)
+ *   Date:         2001.08.15
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -27,6 +27,7 @@
 #define INET_SOCKET_PAIR
 
 /* Max number of children is limited by FD_SETSIZE */
+/* Do not increase it over 500 */
 #ifdef FD_SETSIZE
 #define MAX_CLIENTS    ((FD_SETSIZE-24)/2)
 #else
@@ -86,10 +87,11 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
 
     /* process options */
     options.foreground=1;
-    options.cert_defaults = CERT_DEFAULTS;
+    options.cert_defaults=CERT_DEFAULTS;
 
     safecopy(options.pem, PEM_DIR);
-    if ( options.pem[0] ) { safeconcat(options.pem, "/"); }
+    if(options.pem[0]) /* not an empty string */
+        safeconcat(options.pem, "/");
     safeconcat(options.pem, "stunnel.pem");
 
     parse_options(argc, argv);
@@ -520,7 +522,7 @@ int auth_user(struct sockaddr_in *addr) {
     closesocket(s);
     buff[ptr]='\0';
     if(sscanf(buff, "%*[^:]: USERID :%*[^:]:%s", name)!=1) {
-        log(LOG_ERR, "Incorrect data from inetd server");
+        log(LOG_ERR, "Incorrect data from ident server");
         return -1;
     }
     retval=strcmp(name, options.username) ? -1 : 0;

@@ -684,7 +684,7 @@ static void print_option(int type, opt_union *val) {
         fprintf(stderr, "%10s", val->c_val);
         break;
     default:
-        break;
+        ; /* ANSI C compiler needs it */
     }
 }
 
@@ -750,7 +750,7 @@ static int parse_socket_option(char *optarg) {
         strcpy(ptr->opt_val[socket_type]->c_val, opt_val_str);
         return 1; /* OK */
     default:
-        break;
+        ; /* ANSI C compiler needs it */
     }
     return 0; /* FAILED */
 }

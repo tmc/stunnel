@@ -300,8 +300,8 @@ static int transfer(int sock_rfd, int sock_wfd,
         }
 
         /* socket open for read -> set timeout to 1 hour */
-        /* socket closed for read -> set timeout to 1 minute */
-        tv.tv_sec=sock_rd ? 3600 : 60;
+        /* socket closed for read -> set timeout to 10 seconds */
+        tv.tv_sec=sock_rd ? 3600 : 10;
         tv.tv_usec=0;
 
         do { /* Skip "Interrupted system call" errors */
@@ -311,9 +311,14 @@ static int transfer(int sock_rfd, int sock_wfd,
             sockerror("select");
             goto error;
         }
-        if(!ready) { /* Break the connection on timeout */
-            log(LOG_DEBUG, "select timeout");
-            goto error;
+        if(!ready) { /* Timeout */
+            if(sock_rd) { /* No traffic for a long time */
+                log(LOG_DEBUG, "select timeout - connection reset");
+                goto error;
+            } else { /* Timeout waiting for SSL close_notify */
+                log(LOG_DEBUG, "select timeout waiting for SSL close_notify");
+                break; /* Leave the while() loop */
+            }
         }
 
         /* Set flag to try and read any buffered SSL data if we made */
@@ -329,10 +334,10 @@ static int transfer(int sock_rfd, int sock_wfd,
             if(num) {
                 memcpy(ssl_buff, ssl_buff+num, ssl_ptr-num);
                 if(ssl_ptr==BUFFSIZE)
-                    check_SSL_pending = 1;
+                    check_SSL_pending=1;
                 ssl_ptr-=num;
                 sock_bytes+=num;
-                if(!ssl_rd && !ssl_ptr && sock_wr) {
+                if(!ssl_rd && !ssl_ptr) {
                     shutdown(sock_wfd, SHUT_WR);
                     log(LOG_DEBUG,
                         "Socket write shutdown (no more data to send)");
@@ -356,7 +361,7 @@ static int transfer(int sock_rfd, int sock_wfd,
                 sock_ptr-=num;
                 ssl_bytes+=num;
                 if(!sock_rd && !sock_ptr && ssl_wr) {
-                    SSL_shutdown(ssl);
+                    SSL_shutdown(ssl); /* Send close_notify */
                     log(LOG_DEBUG,
                         "SSL write shutdown (no more data to send)");
                     ssl_wr=0;
@@ -368,19 +373,16 @@ static int transfer(int sock_rfd, int sock_wfd,
                 log(LOG_DEBUG, "SSL_write returned WANT_ - retry");
                 break;
             case SSL_ERROR_SYSCALL:
-                if(num==-1) { /* not EOF */
+                if(num<0) { /* not EOF */
                     sockerror("SSL_write (ERROR_SYSCALL)");
                     goto error;
                 }
-                log(LOG_DEBUG, "Unexpected socket close on SSL_write");
-            case SSL_ERROR_ZERO_RETURN: /* Is it possible? */
-                log(LOG_DEBUG, "SSL closed on write");
-                ssl_wr=0;
-                if(sock_rd) {
-                    shutdown(sock_rfd, SHUT_RD);
-                    log(LOG_DEBUG, "Socket read shutdown");
-                    sock_rd=0;
-                }
+                log(LOG_DEBUG, "SSL socket closed on SSL_write");
+                ssl_rd=ssl_wr=0;
+                break;
+            case SSL_ERROR_ZERO_RETURN: /* close_notify received */
+                log(LOG_DEBUG, "SSL closed on SSL_write");
+                ssl_rd=ssl_wr=0;
                 break;
             case SSL_ERROR_SSL:
                 sslerror("SSL_write");
@@ -404,7 +406,7 @@ static int transfer(int sock_rfd, int sock_wfd,
                 log(LOG_DEBUG, "Socket closed on read");
                 sock_rd=0;
                 if(!sock_ptr && ssl_wr) {
-                    SSL_shutdown(ssl);
+                    SSL_shutdown(ssl); /* Send close_notify */
                     log(LOG_DEBUG,
                         "SSL write shutdown (output buffer empty)");
                     ssl_wr=0;
@@ -433,16 +435,18 @@ static int transfer(int sock_rfd, int sock_wfd,
                 log(LOG_DEBUG, "SSL_read returned WANT_ - retry");
                 break;
             case SSL_ERROR_SYSCALL:
-                if(num==-1) { /* not EOF */
+                if(num<0) { /* not EOF */
                     sockerror("SSL_read (SSL_ERROR_SYSCALL)");
                     goto error;
                 }
-                log(LOG_DEBUG, "Unexpected socket close on SSL_read");
-            case SSL_ERROR_ZERO_RETURN:
-                log(LOG_DEBUG, "SSL closed on read");
+                log(LOG_DEBUG, "SSL socket closed on SSL_read");
+                ssl_rd=ssl_wr=0;
+                break;
+            case SSL_ERROR_ZERO_RETURN: /* close_notify received */
+                log(LOG_DEBUG, "SSL closed on SSL_read");
                 ssl_rd=0;
                 if(!sock_ptr && ssl_wr) {
-                    SSL_shutdown(ssl);
+                    SSL_shutdown(ssl); /* Send close_notify back */
                     log(LOG_DEBUG,
                         "SSL write shutdown (output buffer empty)");
                     ssl_wr=0;
