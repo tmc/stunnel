@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-2001 Michal Trojnara <Michal.Trojnara@mirt.net>
  *                 All Rights Reserved
  *
- *   Version:      3.20                  (stunnel.c)
- *   Date:         2001.08.15
+ *   Version:      3.21                  (stunnel.c)
+ *   Date:         2001.08.xx
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -23,18 +23,8 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* Undefine if you have problems with make_sockets() */
-#define INET_SOCKET_PAIR
-
-/* Max number of children is limited by FD_SETSIZE */
-/* Do not increase it over 500 */
-#ifdef FD_SETSIZE
-#define MAX_CLIENTS    ((FD_SETSIZE-24)/2)
-#else
-#define MAX_CLIENTS    500
-#endif
-
 #include "common.h"
+#include "proto.h"
 
 #ifdef USE_WIN32
 static struct WSAData wsa_state;
@@ -50,12 +40,9 @@ static void delete_pid();
 
     /* Socket functions */
 static int listen_local();
-#ifndef USE_WIN32
-static int make_sockets(int [2]);
-#endif
 
     /* Error/exceptions handling functions */
-static void ioerror(char *);
+void ioerror(char *);
 void sockerror(char *);
 #ifdef USE_FORK
 static void sigchld_handler(int);
@@ -116,27 +103,16 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
     context_init(); /* initialize global SSL context */
     sthreads_init(); /* initialize threads */
     log(LOG_NOTICE, "%s", STUNNEL_INFO);
-    if (options.option & OPT_DAEMON) {
-        /* client or server, daemon mode */
+    if(options.option & OPT_DAEMON) { /* daemon mode */
 #ifndef USE_WIN32
-        if (!(options.option & OPT_FOREGROUND))
+        if(!(options.option & OPT_FOREGROUND))
             daemonize();
         create_pid();
 #endif
         daemon_loop();
-    } else if ((options.option & OPT_CLIENT) &&
-        (options.option & OPT_PROGRAM)) {
-        /* client, program mode */
-        int local;
-        u32 ip = 0; /* local program or stdin/stdout */
-        if ((local = connect_local(ip)) >= 0) {
-            options.clients = 1;
-            client(local);
-        }
-    } else {
-        /* client or server, inetd mode */
+    } else { /* inetd mode */
         options.clients = 1;
-        client(STDIO_FILENO); /* rd fd=0, wr fd=1 */
+        client((void *)STDIO_FILENO); /* rd fd=0, wr fd=1 */
     }
     /* close SSL */
     context_free(); /* free global SSL context */
@@ -167,6 +143,7 @@ static void daemon_loop() {
         } while(s<0 && get_last_socket_error()==EINTR);
         if(s<0) {
             sockerror("accept");
+            sleep(10);
             continue;
         }
         if(options.clients<MAX_CLIENTS) {
@@ -370,220 +347,6 @@ static int listen_local() { /* bind and listen on local interface */
     return ls;
 }
 
-int connect_local(u32 ip) { /* spawn local process */
-#ifdef USE_WIN32
-    log(LOG_ERR, "LOCAL MODE NOT SUPPORTED ON WIN32 PLATFORM");
-    return -1;
-#else
-    struct in_addr addr;
-    char text[STRLEN];
-    int fd[2];
-    unsigned long pid;
-
-    if (options.option & OPT_PTY) {
-        char tty[STRLEN];
-
-        if(pty_allocate(fd, fd+1, tty, STRLEN)) {
-            return -1;
-        }
-        log(LOG_DEBUG, "%s allocated", tty);
-    } else {
-        if(make_sockets(fd))
-            return -1;
-    }
-#ifdef USE_FORK
-    /* Each child has to take care of its own dead children */
-    signal(SIGCHLD, local_handler);
-#endif /* defined USE_FORK */
-    /* With USE_PTHREAD main thread does the work */
-    /* and SIGCHLD is blocked in other theads */
-    pid=(unsigned long)fork();
-    switch(pid) {
-    case -1:    /* error */
-        closesocket(fd[0]);
-        closesocket(fd[1]);
-        ioerror("fork");
-        return -1;
-    case  0:    /* child */
-        closesocket(fd[0]);
-        dup2(fd[1], 0);
-        dup2(fd[1], 1);
-        if (!options.foreground)
-            dup2(fd[1], 2);
-        closesocket(fd[1]);
-        if (ip) {
-            putenv("LD_PRELOAD=" libdir "/stunnel.so");
-            /* For Tru64 _RLD_LIST is used instead */
-            putenv("_RLD_LIST=" libdir "/stunnel.so:DEFAULT");
-            addr.s_addr = ip;
-            safecopy(text, "REMOTE_HOST=");
-            enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
-            safeconcat(text, inet_ntoa(addr));
-            leave_critical_section(CRIT_NTOA);
-            putenv(text);
-        }
-        execvp(options.execname, options.execargs);
-        ioerror("execvp"); /* execv failed */
-        _exit(1);
-    }
-    /* parent */
-    log(LOG_INFO, "Local mode child started (PID=%lu)", pid);
-    closesocket(fd[1]);
-    return fd[0];
-#endif /* USE_WIN32 */
-}
-
-int connect_remote(u32 ip) { /* connect to remote host */
-    struct sockaddr_in addr;
-    int s; /* destination socket */
-    u32 *list; /* destination addresses list */
-
-    if((s=socket(AF_INET, SOCK_STREAM, 0))<0) {
-        sockerror("remote socket");
-        return -1;
-    }
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family=AF_INET;
-
-    if(ip) { /* transparent proxy */
-        addr.sin_addr.s_addr=ip;
-        addr.sin_port=htons(0);
-        if(bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
-            sockerror("bind transparent");
-            return -1;
-        }
-    }
-
-    addr.sin_port=options.remoteport;
-
-    /* connect each host from the list*/
-    for(list=options.remotenames; *list!=-1; list++) {
-        addr.sin_addr.s_addr=*list;
-        enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
-        log(LOG_DEBUG, "%s connecting %s:%d", options.servname,
-            inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-        leave_critical_section(CRIT_NTOA);
-        if(!connect(s, (struct sockaddr *) &addr, sizeof(addr)))
-            return s; /* success */
-    }
-    sockerror("remote connect");
-    return -1;
-}
-
-int auth_user(struct sockaddr_in *addr) {
-    struct servent *s_ent;    /* structure for getservbyname */
-    struct sockaddr_in ident; /* IDENT socket name */
-    int s;                    /* IDENT socket descriptor */
-    char buff[STRLEN], name[STRLEN];
-    int ptr, len, retval;
-
-    if(!options.username)
-        return 0; /* -u option not specified */
-    if((s=socket(AF_INET, SOCK_STREAM, 0))<0) {
-        sockerror("socket (ident)");
-        return -1;
-    }
-    memcpy(&ident, addr, sizeof(ident));
-    s_ent=getservbyname("auth", "tcp");
-    if(!s_ent) {
-        log(LOG_WARNING, "Unknown service 'auth' - using default 113");
-        ident.sin_port=htons(113);
-    } else {
-        ident.sin_port=s_ent->s_port;
-    }
-    if(connect(s, (struct sockaddr *)&ident, sizeof(ident))<0) {
-        sockerror("connect (ident)");
-        closesocket(s);
-        return -1;
-    }
-#ifdef HAVE_SNPRINTF
-    len=snprintf(buff, STRLEN,
-        "%u , %u\r\n", ntohs(addr->sin_port), ntohs(options.localport));
-#else
-    len=sprintf(buff,
-        "%u , %u\r\n", ntohs(addr->sin_port), ntohs(options.localport));
-#endif
-    len=writesocket(s, buff, len);
-    if(len<0) {
-        sockerror("writesocket (ident)");
-        closesocket(s);
-        return -1;
-    }
-    ptr=0;
-    do {
-        len=readsocket(s, buff+ptr, STRLEN-ptr-1);
-        if(len<0) {
-            sockerror("readsocket (ident)");
-            closesocket(s);
-            return -1;
-        }
-        ptr+=len;
-    } while(len && ptr<STRLEN-1);
-    closesocket(s);
-    buff[ptr]='\0';
-    if(sscanf(buff, "%*[^:]: USERID :%*[^:]:%s", name)!=1) {
-        log(LOG_ERR, "Incorrect data from ident server");
-        return -1;
-    }
-    retval=strcmp(name, options.username) ? -1 : 0;
-    safestring(name);
-    log(LOG_INFO, "IDENT resolved remote user to %s", name);
-    return retval;
-}
-
-#ifndef USE_WIN32
-static int make_sockets(int fd[2]) { /* make pair of connected sockets */
-#ifdef INET_SOCKET_PAIR
-    struct sockaddr_in addr;
-    int addrlen;
-    int s; /* temporary socket awaiting for connection */
-
-    if((s=socket(AF_INET, SOCK_STREAM, 0))<0) {
-        sockerror("socket#1");
-        return -1;
-    }
-    if((fd[1]=socket(AF_INET, SOCK_STREAM, 0))<0) {
-        sockerror("socket#2");
-        return -1;
-    }
-    addrlen=sizeof(addr);
-    memset(&addr, 0, addrlen);
-    addr.sin_family=AF_INET;
-    addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
-    addr.sin_port=0; /* dynamic port allocation */
-    if(bind(s, (struct sockaddr *)&addr, addrlen))
-        log(LOG_DEBUG, "bind#1: %s (%d)",
-            strerror(get_last_socket_error()), get_last_socket_error());
-    if(bind(fd[1], (struct sockaddr *)&addr, addrlen))
-        log(LOG_DEBUG, "bind#2: %s (%d)",
-            strerror(get_last_socket_error()), get_last_socket_error());
-    if(listen(s, 5)) {
-        sockerror("listen");
-        return -1;
-    }
-    if(getsockname(s, (struct sockaddr *)&addr, &addrlen)) {
-        sockerror("getsockname");
-        return -1;
-    }
-    if(connect(fd[1], (struct sockaddr *)&addr, addrlen)) {
-        sockerror("connect");
-        return -1;
-    }
-    if((fd[0]=accept(s, (struct sockaddr *)&addr, &addrlen))<0) {
-        sockerror("accept");
-        return -1;
-    }
-    closesocket(s); /* don't care about the result */
-#else
-    if(socketpair(AF_UNIX, SOCK_STREAM, 0, fd)) {
-        sockerror("socketpair");
-        return -1;
-    }
-#endif
-    return 0;
-}
-#endif
-
 int set_socket_options(int s, int type) {
     sock_opt *ptr;
     extern sock_opt sock_opts[];
@@ -615,7 +378,7 @@ int set_socket_options(int s, int type) {
     return 0; /* OK */
 }
 
-static void ioerror(char *txt) { /* Input/Output error handler */
+void ioerror(char *txt) { /* Input/Output error handler */
     int error;
 
     error=get_last_error();
@@ -659,9 +422,21 @@ static void sigchld_handler(int sig) { /* Dead children detected */
 static void local_handler(int sig) { /* sigchld handler for -l processes */
     int pid, status;
 
+#if defined(HAVE_WAITPID)
+    while((pid=waitpid(-1, &status, WNOHANG))>0) {
+        if(WIFSIGNALED(status)) {
+            log(LOG_DEBUG, "Local process %s[%d] terminated on signal %d)",
+                options.servname, pid, WTERMSIG(status));
+        } else {
+            log(LOG_DEBUG, "Local process %s[%d] finished with code %d)",
+                options.servname, pid, WEXITSTATUS(status));
+        }
+    }
+#else
     pid=wait(&status);
     log(LOG_DEBUG, "Local process %s[%d] finished with code %d",
         options.servname, pid, status);
+#endif
     signal(SIGCHLD, local_handler);
 }
 

@@ -19,6 +19,7 @@
  */
 
 #include "common.h"
+#include "proto.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/crypto.h> /* for CRYPTO_* */
@@ -79,7 +80,7 @@ unsigned long thread_id() {
     return (unsigned long)pthread_self();
 }
 
-int create_client(int ls, int s, void (*cli)(int)) {
+int create_client(int ls, int s, void *(*cli)(void *)) {
      pthread_t thread;
      sigset_t mask, oldmask;
 
@@ -90,8 +91,8 @@ int create_client(int ls, int s, void (*cli)(int)) {
      sigaddset(&mask, SIGINT);
      sigaddset(&mask, SIGHUP);
      pthread_sigmask(SIG_BLOCK, &mask, &oldmask); /* block SIGCHLD */
-     if(pthread_create(&thread, &pth_attr, (void *)cli, (void *)s)) {
-         /* SIGCHLD will remain blocked here */
+     if(pthread_create(&thread, &pth_attr, cli, (void *)s)) {
+         /* SIGCHLD remains blocked here */
          closesocket(s);
          return -1;
      }
@@ -129,7 +130,7 @@ unsigned long thread_id() {
     return GetCurrentThreadId();
 }
 
-int create_client(int ls, int s, void (*cli)(int)) {
+int create_client(int ls, int s, void *(*cli)(void *)) {
     DWORD iID;
 
     CloseHandle(CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)cli,
@@ -161,7 +162,7 @@ unsigned long thread_id() {
     return 0L;
 }
 
-int create_client(int ls, int s, void (*cli)(int)) {
+int create_client(int ls, int s, void *(*cli)(void *)) {
     switch(fork()) {
     case -1:    /* error */
         closesocket(s);
@@ -169,7 +170,7 @@ int create_client(int ls, int s, void (*cli)(int)) {
     case  0:    /* child */
         closesocket(ls);
         signal(SIGCHLD, SIG_IGN);
-        cli(s);
+        cli((void *)s);
         exit(0);
     default:    /* parent */
         closesocket(s);

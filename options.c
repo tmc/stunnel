@@ -19,6 +19,7 @@
  */
 
 #include "common.h"
+#include "proto.h"
 
 /* Needed so we know which version of OpenSSL we're using */
 #ifdef HAVE_OPENSSL
@@ -166,7 +167,7 @@ void parse_options(int argc, char *argv[]) {
                 if (!(options.option & OPT_PROGRAM)) {
                     /* Default servname is optarg with '.' instead of ':' */
                     safecopy(options.servname, optarg);
-                    safestring(options.servname);
+                    safename(options.servname);
                 }
                 options.remotenames=NULL;
                 name2nums(optarg, &options.remotenames, &options.remoteport);
@@ -639,7 +640,7 @@ static int print_socket_options() {
 
     fprintf(stderr, "Socket option defaults:\n");
     fprintf(stderr, "\t%-16s%-10s%-10s%-10s%-10s\n",
-        "Option", "Accept", "Local", "Remote", "OS defalut");
+        "Option", "Accept", "Local", "Remote", "OS default");
     for(ptr=sock_opts; ptr->opt_str; ptr++) {
         fprintf(stderr, "\t%-16s", ptr->opt_str);
         print_option(ptr->opt_type, ptr->opt_val[0]);

@@ -19,6 +19,7 @@
  */
 
 #include "common.h"
+#include "proto.h"
 
 /* protocol-specific function prototypes */
 static int smb_client(int, int, int);
@@ -32,10 +33,6 @@ static int nntp_server(int, int, int);
 static int telnet_client(int, int, int);
 static int telnet_server(int, int, int);
 static int RFC2487(int);
-
-/* descriptor versions of fprintf/fscanf */
-static int fdprintf(int, char *, ...);
-static int fdscanf(int, char *, char *);
 
 int negotiate(char *protocol, int client, int local_rd, int local_wr, int remote) {
     if(!protocol)
@@ -208,61 +205,6 @@ static int telnet_client(int local_rd, int local_wr, int remote) {
 static int telnet_server(int local_rd, int local_wr, int remote) {
     log(LOG_ERR, "Protocol not supported");
     return -1;
-}
-
-static int fdprintf(int fd, char *format, ...) {
-    va_list arglist;
-    char line[STRLEN], logline[STRLEN];
-    char *crlf="\r\n";
-    int len;
-
-    va_start(arglist, format);
-#ifdef HAVE_VSNPRINTF
-    len=vsnprintf(line, STRLEN, format, arglist);
-#else
-    len=vsprintf(line, format, arglist);
-#endif
-    va_end(arglist);
-    if(writesocket(fd, line, len)<0) {
-        sockerror("writesocket (fdprintf)");
-        return -1;
-    }
-    if(writesocket(fd, crlf, 2)<0) {
-        sockerror("writesocket (fdprintf)");
-        return -1;
-    }
-    safecopy(logline, line);
-    safestring(logline);
-    log(LOG_DEBUG, " -> %s", line);
-    return len;
-}
-
-static int fdscanf(int fd, char *format, char *buffer) {
-    char line[STRLEN], logline[STRLEN];
-    int ptr;
-
-    ptr=0;
-    for(;;) {
-        switch(readsocket(fd, line+ptr, 1)) {
-        case -1: /* error */
-            sockerror("readsocket (fdscanf)");
-            return -1;
-        case 0: /* EOF */
-            log(LOG_ERR, "Unexpected socket close (fdscanf)");
-            return -1;
-        }
-        if(line[ptr]=='\r')
-            continue;
-        if(line[ptr]=='\n')
-            break;
-        if(++ptr==STRLEN-1)
-            break;
-    }
-    line[ptr]='\0';
-    safecopy(logline, line);
-    safestring(logline);
-    log(LOG_DEBUG, " <- %s", logline);
-    return sscanf(line, format, buffer);
 }
 
 /* 

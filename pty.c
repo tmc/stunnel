@@ -21,6 +21,7 @@
  */
 
 #include "common.h"
+#include "proto.h"
 
 #ifdef HAVE_UTIL_H
 #include <util.h>
@@ -199,10 +200,10 @@ int pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, int namebuflen) {
 /* Releases the tty.  Its ownership is returned to root, and permissions to 0666. */
 
 void pty_release(char *ttyname) {
-    if (chown(ttyname, (uid_t) 0, (gid_t) 0) < 0)
+    if(chown(ttyname, (uid_t)0, (gid_t)0)<0)
         log(LOG_DEBUG, "chown %.100s 0 0 failed: %.100s", ttyname,
             strerror(get_last_socket_error()));
-    if (chmod(ttyname, (mode_t) 0666) < 0)
+    if(chmod(ttyname, (mode_t)0666)<0)
         log(LOG_DEBUG, "chmod %.100s 0666 failed: %.100s", ttyname,
             strerror(get_last_socket_error()));
 }

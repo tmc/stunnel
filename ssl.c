@@ -39,6 +39,7 @@
 #endif /* NO_RSA */
 
 #include "common.h"
+#include "proto.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/lhash.h>
@@ -54,14 +55,15 @@
 extern server_options options;
 
     /* SSL functions */
-static void initialize_prng();
+static void prng_init();
 static int  prng_seeded(int);
 static int  add_rand_file(char *);
 #ifndef NO_RSA
 static RSA *tmp_rsa_cb(SSL *, int, int);
 static RSA *make_temp_key(int);
 #endif /* NO_RSA */
-static int verify_callback (int, X509_STORE_CTX *);
+static void verify_init();
+static int verify_callback(int, X509_STORE_CTX *);
 static void info_callback(SSL *, int, int);
 static void print_stats();
 
@@ -73,7 +75,7 @@ void context_init() { /* init SSL */
     BIO *bio=NULL;
 #endif /* NO_DH */
 
-    initialize_prng();
+    prng_init();
     SSLeay_add_ssl_algorithms();
     SSL_load_error_strings();
     if(options.option&OPT_CLIENT) {
@@ -112,6 +114,11 @@ dh_done:
 #endif /* NO_DH */
     }
 
+#if SSLEAY_VERSION_NUMBER >= 0x00906000L
+    SSL_CTX_set_mode(ctx,
+        SSL_MODE_ENABLE_PARTIAL_WRITE|SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+#endif /* OpenSSL-0.9.6 */
+
     SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
     SSL_CTX_set_timeout(ctx, options.session_timeout);
     if(options.option&OPT_CERT) {
@@ -140,62 +147,11 @@ dh_done:
             exit(1);
         }
     }
-    if(options.verify_level!=SSL_VERIFY_NONE) {
-        log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
-        log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
-        log(LOG_DEBUG, "cert_file is %s", options.cert_file);
-        if (options.cert_defaults & SSL_CERT_DEFAULTS) {
-                log(LOG_DEBUG, "Initializing SSL library verify paths");
-                if ((!SSL_CTX_set_default_verify_paths(ctx))) {
-                    sslerror("X509_set_default_verify_paths");
-                    exit(1);
-                }
-        }
 
-        /* put in defaults (if not set on cmd line) if -S says to */
-        if ( options.cert_defaults & STUNNEL_CERT_DEFAULTS ) {
-                log(LOG_DEBUG, "installing defaults where not set");
-                if ( ! options.cert_file[0] )
-                        safecopy(options.cert_file, CERT_FILE);
-                if ( ! options.cert_dir[0] )
-                        safecopy(options.cert_dir, CERT_DIR);
-        }
-        if ( options.cert_file[0] ) {
-            if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,NULL)) {
-                log(LOG_ERR, "Error loading verify certificates from %s",
-                    options.cert_file);
-                sslerror("SSL_CTX_load_verify_locations");
-                exit(1);
-            }
-            SSL_CTX_set_client_CA_list(ctx,
-                SSL_load_client_CA_file(options.cert_file));
-            log(LOG_DEBUG, "Loaded verify certificates from %s",
-                options.cert_file);
-        }
-        if ( options.cert_dir[0] ) {
-            if (!SSL_CTX_load_verify_locations(ctx,NULL ,options.cert_dir)) {
-                log(LOG_ERR, "Error setting verify directory to %s",
-                    options.cert_dir);
-                sslerror("SSL_CTX_load_verify_locations");
-                exit(1);
-            }
-            log(LOG_DEBUG, "Set verify directory to %s", options.cert_dir);
-        }
+    verify_init(); /* Initialize certificate verification */
 
-        /*
-        if (!SSL_CTX_load_verify_locations(ctx, options.cert_file,
-                options.cert_dir)) {
-            sslerror("X509_load_verify_locations");
-            exit(1);
-        }
-        */
-
-        SSL_CTX_set_verify(ctx, options.verify_level, verify_callback);
-
-        if (options.verify_use_only_my)
-            log(LOG_NOTICE, "Peer certificate location %s", options.cert_dir);
-    }
     SSL_CTX_set_info_callback(ctx, info_callback);
+
     if(options.cipher_list) {
         if (!SSL_CTX_set_cipher_list(ctx, options.cipher_list)) {
             sslerror("SSL_CTX_set_cipher_list");
@@ -208,7 +164,7 @@ void context_free() { /* free SSL */
     SSL_CTX_free(ctx);
 }
 
-static void initialize_prng( void ) {
+static void prng_init( void ) {
     int totbytes=0;
     char filename[STRLEN];
     int bytes;
@@ -331,19 +287,6 @@ static int add_rand_file(char *filename) {
     return readbytes;
 }
 
-#if 0
-static void verify_info() {
-    STACK_OF(X509_NAME) *stack;
-    X509_STORE *store;
-
-    stack=SSL_CTX_get_client_CA_list(ctx);
-    log(LOG_DEBUG, "there are %d CA_list things", sk_X509_NAME_num(stack));
-
-    store=SSL_CTX_get_cert_store(ctx);
-    log(LOG_DEBUG, "it's a %p", store);
-}
-#endif
-
 #ifndef NO_RSA
 
 static RSA *tmp_rsa_cb(SSL *s, int export, int keylen) {
@@ -398,22 +341,86 @@ static RSA *make_temp_key(int keylen) {
     log(LOG_DEBUG, "Generating %d bit temporary RSA key...", keylen);
 #if SSLEAY_VERSION_NUMBER >= 0x0900
     result=RSA_generate_key(keylen, RSA_F4, NULL, NULL);
-# else
+#else
     result=RSA_generate_key(keylen, RSA_F4, NULL);
-# endif
+#endif
     log(LOG_DEBUG, "Temporary RSA key created");
     return result;
 }
 
 #endif /* NO_RSA */
 
+static void verify_init() {
+    if(options.verify_level==SSL_VERIFY_NONE)
+        return; /* No need to setup certificate verify */
+    log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
+    log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
+    log(LOG_DEBUG, "cert_file is %s", options.cert_file);
+    if (options.cert_defaults & SSL_CERT_DEFAULTS) {
+        log(LOG_DEBUG, "Initializing SSL library verify paths");
+        if(!SSL_CTX_set_default_verify_paths(ctx)) {
+            sslerror("X509_set_default_verify_paths");
+            exit(1);
+        }
+    }
+
+    /* put in defaults (if not set on cmd line) if -S says to */
+    if (options.cert_defaults & STUNNEL_CERT_DEFAULTS) {
+        log(LOG_DEBUG, "installing defaults where not set");
+        if(!options.cert_file[0])
+            safecopy(options.cert_file, CERT_FILE);
+        if(!options.cert_dir[0])
+            safecopy(options.cert_dir, CERT_DIR);
+    }
+    if(options.cert_file[0]) {
+        if(!SSL_CTX_load_verify_locations(ctx, options.cert_file, NULL)) {
+            log(LOG_ERR, "Error loading verify certificates from %s",
+                options.cert_file);
+            sslerror("SSL_CTX_load_verify_locations");
+            exit(1);
+        }
+        SSL_CTX_set_client_CA_list(ctx,
+            SSL_load_client_CA_file(options.cert_file));
+        log(LOG_DEBUG, "Loaded verify certificates from %s",
+            options.cert_file);
+    }
+    if(options.cert_dir[0]) {
+        if (!SSL_CTX_load_verify_locations(ctx, NULL ,options.cert_dir)) {
+            log(LOG_ERR, "Error setting verify directory to %s",
+                options.cert_dir);
+            sslerror("SSL_CTX_load_verify_locations");
+            exit(1);
+        }
+        log(LOG_DEBUG, "Set verify directory to %s", options.cert_dir);
+    }
+
+    SSL_CTX_set_verify(ctx, options.verify_level, verify_callback);
+
+    if (options.verify_use_only_my)
+        log(LOG_NOTICE, "Peer certificate location %s", options.cert_dir);
+}
+
+#if 0
+static void verify_info() {
+    STACK_OF(X509_NAME) *stack;
+    X509_STORE *store;
+
+    stack=SSL_CTX_get_client_CA_list(ctx);
+    log(LOG_DEBUG, "there are %d CA_list things", sk_X509_NAME_num(stack));
+
+    store=SSL_CTX_get_cert_store(ctx);
+    log(LOG_DEBUG, "it's a %p", store);
+}
+#endif
+
 static int verify_callback(int state, X509_STORE_CTX *ctx) {
         /* our verify callback function */
-    char txt[256];
+    char txt[STRLEN];
     X509_OBJECT ret;
 
     X509_NAME_oneline(X509_get_subject_name(ctx->current_cert),
-        txt, sizeof(txt));
+        txt, STRLEN);
+    safestring(txt);
     if(!state) {
         /* Remote site specified a certificate, but it's not correct */
         log(LOG_WARNING, "VERIFY ERROR: depth=%d error=%s: %s",

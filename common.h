@@ -18,6 +18,9 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#ifndef COMMON_H
+#define COMMON_H
+
 /* Certificate defaults */
 
 /* let's not use openssl defaults unless told to at compile time. */
@@ -85,6 +88,7 @@ typedef unsigned __int64 u64;
 int _vsnprintf(char *, int, char *, ...);
 */
 #define strcasecmp _stricmp
+#define sleep _sleep
 
 #define get_last_socket_error() WSAGetLastError()
 #define get_last_error()        GetLastError()
@@ -105,6 +109,7 @@ int _vsnprintf(char *, int, char *, ...);
 #define ECONNRESET WSAECONNRESET
 #define ENOTSOCK WSAENOTSOCK
 #define ENOPROTOOPT WSAENOPROTOOPT
+#define EINPROGRESS WSAEINPROGRESS
 
 #else /* USE_WIN32 */
 
@@ -227,120 +232,22 @@ extern char *sys_errlist[];
     (dst[STRLEN-1]='\0', strncpy((dst), (src), STRLEN-1))
 #define safeconcat(dst, src) \
     (dst[STRLEN-1]='\0', strncat((dst), (src), STRLEN-strlen(dst)-1))
-/* change all unsafe characters to '.' */
+/* change all non-printable characters to '.' */
 #define safestring(s) \
-    do {char *p; for(p=(s); *p; p++) if(!isalnum(*p)) *p='.';} while(0)
+    do {char *p; for(p=(s); *p; p++) if(!isprint((int)*p)) *p='.';} while(0)
+/* change all unsafe characters to '.' */
+#define safename(s) \
+    do {char *p; for(p=(s); *p; p++) if(!isalnum((int)*p)) *p='.';} while(0)
 
-/* Prototypes for stunnel.c */
+#ifndef FD_SETSIZE
+/* 1024 is a common value */
+#define FD_SETSIZE 1024
+#endif
 
-void sockerror(char *);
-int connect_local(u32);
-int connect_remote(u32);
-int set_socket_options(int, int);
-int auth_user(struct sockaddr_in *);
+/* Max number of children is limited by FD_SETSIZE */
+/* Do not increase it over 500 */
+#define MAX_CLIENTS ((FD_SETSIZE-24)/2)
 
-/* Prototypes for ssl.c */
-
-void context_init();
-void context_free();
-void sslerror(char *);
-
-/* Prototypes for ssl.c */
-void client(int);
-
-/* Prototypes for protocol.c */
-
-int negotiate(char *, int, int, int, int);
-
-/* Prototypes for log.c */
-
-void log_open();
-void log_close();
-void log(int, char *, ...);
-
-/* Prototypes for sthreads.c */
-
-typedef enum {
-    CRIT_KEYGEN, CRIT_LIBWRAP, CRIT_NTOA, CRIT_CLIENTS, CRIT_SECTIONS
-} section_code;
-
-void enter_critical_section(section_code);
-void leave_critical_section(section_code);
-void sthreads_init(void);
-unsigned long process_id(void);
-unsigned long thread_id(void);
-int create_client(int, int, void (*)(int));
-
-/* Prototypes for pty.c */
-/* Based on Public Domain code by Tatu Ylonen <ylo@cs.hut.fi> */
-
-int pty_allocate(int *ptyfd, int *ttyfd, char *ttyname, int ttynamelen);
-void pty_release(char *ttyname);
-void pty_make_controlling_tty(int *ttyfd, char *ttyname);
-
-/* Prototypes for options.c */
-#define OPT_CLIENT      0x01
-#define OPT_CERT        0x02
-#define OPT_DAEMON      0x04
-#define OPT_FOREGROUND  0x08
-#define OPT_PROGRAM     0x10
-#define OPT_REMOTE      0x20
-#define OPT_TRANSPARENT 0x40
-#define OPT_PTY         0x80
-
-typedef struct {
-    char pem[STRLEN];                        /* pem (priv key/cert) filename */
-    char cert_dir[STRLEN];                     /* directory for hashed certs */
-    char cert_file[STRLEN];              /* file containing bunches of certs */
-    char pidfile[STRLEN];
-    unsigned long dpid;
-    int clients;
-    int option;
-    int foreground;                              /* force messages to stderr */
-    unsigned short localport, remoteport;
-    u32 *localnames, *remotenames;
-    char *execname, **execargs; /* program name and arguments for local mode */
-    char servname[STRLEN];  /* service name for loggin & permission checking */
-    int verify_level;
-    int verify_use_only_my;
-    int debug_level;                               /* debug level for syslog */
-    int facility;                               /* debug facility for syslog */
-    long session_timeout;
-    char *cipher_list;
-    char *username;
-    char *protocol;
-    char *setuid_user;
-    char *setgid_group;
-    char *egd_sock;                       /* entropy gathering daemon socket */
-    char *rand_file;                                /* file with random data */
-    int rand_write; /* overwrite rand_file with new rand data when PRNG seeded */
-    int random_bytes;                       /* how many random bytes to read */
-    char *pid_dir;
-    int cert_defaults;
-    char *output_file;
-    u32 *local_ip;
-} server_options;
-
-typedef enum {
-    TYPE_NONE, TYPE_FLAG, TYPE_INT, TYPE_LINGER, TYPE_TIMEVAL, TYPE_STRING
-} val_type;
-
-typedef union {
-    int            i_val;
-    long           l_val;
-    char           c_val[16];
-    struct linger  linger_val;
-    struct timeval timeval_val;
-} opt_union;
-
-typedef struct {
-    char *opt_str;
-    int  opt_level;
-    int  opt_name;
-    val_type opt_type;
-    opt_union *opt_val[3];
-} sock_opt;
-
-void parse_options(int argc, char *argv[]);
+#endif /* defined COMMON_H */
 
 /* End of common.h */

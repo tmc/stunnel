@@ -1,5 +1,18 @@
 stunnel         Universal SSL tunnel
 
+Version 3.21, 2001.08.xx, urgency: LOW:
+* Rate of accept() errors limited to 1 per 10 seconds.
+* Buffer size increased from 8KB to 16KB.
+* SSL mode changed with OpenSSL >= 0.9.6.
+* auth_user() redesigned to force 1 minute timeout.
+* fdscanf()/fdprintf() changes:
+   - non-blocking socket support
+   - timeout after 1 minute of inactivity.
+* Some source arrangement towards 4.x architecture.
+* New Makefile 'test' rule.  It performs basic test of
+  standalone/inetd, remote/local and server/client mode.
+* One more attempt to catch all the zombies with -l with threads.
+
 Version 3.20, 2001.08.15, urgency: LOW:
 * setsockopt() optlen set according to the optval for Solaris.
 * Minor NetBSD compatibility fixes by Martti Kuparinen.
