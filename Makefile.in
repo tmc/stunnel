@@ -24,7 +24,7 @@ DESTFILES=$(sbindir)/stunnel $(libdir)/stunnel.so $(man8dir)/stunnel.8  $(PEM_DI
 
 # standard external rules
 
-all: stunnel stunnel.so stunnel.pem
+all: stunnel stunnel.8 stunnel.html stunnel.so stunnel.pem
 
 install: all installdirs $(DESTFILES)
 
@@ -38,7 +38,7 @@ clean:
 	rm -f stunnel stunnel.so $(OBJS) core config.log
 
 distclean: clean
-	rm -f stunnel.8 config.cache config.status Makefile stunnel.pem
+	rm -f config.cache config.status Makefile stunnel.pem
 
 mostlyclean: distclean
 
@@ -56,8 +56,12 @@ installdirs: mkinstalldirs
 
 # non-standard external rules
 
-stunnel.html: man2html.pl stunnel.8
-	./man2html.pl < stunnel.8 > stunnel.html
+stunnel.8: stunnel.sdf
+	sdf -2man stunnel.sdf > stunnel.8
+	rm -f stunnel.out
+
+stunnel.html: stunnel.sdf
+	sdf -2html stunnel.sdf
 
 cert:
 	rm -f stunnel.pem

@@ -8,7 +8,7 @@ if test "$GCC" = "yes"; then CFLAGS="$CFLAGS -Wall"; fi
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
-VERSION="3.10beta1"
+VERSION="3.10beta2"
 AC_SUBST(VERSION)
 AC_DEFINE_UNQUOTED(VERSION, "$VERSION")
 
@@ -120,6 +120,7 @@ AC_SUBST(host)
 AC_DEFINE_UNQUOTED(HOST, "$host")
 
 dnl Checks for standard libraries.
+AC_CHECK_LIB(dl, dlopen)
 AC_CHECK_LIB(nsl, gethostbyname)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(pthread, pthread_create)
@@ -172,5 +173,5 @@ AC_CHECK_HEADERS(getopt.h unistd.h sys/select.h tcpd.h pthread.h pty.h stropts.h
 dnl Checks for library functions.
 AC_CHECK_FUNCS(getopt snprintf vsnprintf openpty _getpty daemon)
 
-AC_OUTPUT(Makefile stunnel.8)
+AC_OUTPUT(Makefile)
 

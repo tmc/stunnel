@@ -2,6 +2,8 @@ stunnel         Universal SSL tunnel
 
 Version 3.10, ?, urgency: ?:
 * Internal thread synchronization code added.
+* libdl added to stunnel dependencies if it exists.
+* Manpage converted to sdf format.
 
 Version 3.9, 2000.12.13, urgency: HIGH:
 * Updated temporary key generation:
