@@ -115,7 +115,8 @@ $(man8dir)/stunnel.8: stunnel.8
 	$(INSTALL) -m 644 stunnel.8 $(man8dir)
 
 $(PEM_DIR)/stunnel.pem: stunnel.pem
-	test -n "$(PEM_DIR)" -a ! -f "$(PEM_DIR)/stunnel.pem" && $(INSTALL) -m 600 stunnel.pem $(PEM_DIR)
+	test -z "$(PEM_DIR)" -o -f "$(PEM_DIR)/stunnel.pem" || \
+		$(INSTALL) -m 600 stunnel.pem $(PEM_DIR)
 
 ../dist/$(VERSION).exe: stunnel.exe
 	./mkinstalldirs ../dist

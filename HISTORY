@@ -1,5 +1,8 @@
 stunnel         Universal SSL tunnel
 
+Version 3.21a, 2001.10.31, urgency: MEDIUM:
+* Small bug in Makefile fixed.
+
 Version 3.21, 2001.10.31, urgency: MEDIUM:
 * Problem with errno and posix threads fixed.
 * It is assumed that system has getopt() if it has getopt.h header file.
