@@ -414,11 +414,10 @@ void client(int local) {
     if(local==STDIO_FILENO) { /* Read from STDIN, write to STDOUT */
         local_rd=0;
         local_wr=1;
-        local=0; /* Use stdin for libwrap and setting socket options */
     } else
         local_rd=local_wr=local;
 
-    if(getpeername(local, (struct sockaddr *)&addr, &addrlen)<0) {
+    if(getpeername(local_rd, (struct sockaddr *)&addr, &addrlen)<0) {
         if(options.option&OPT_TRANSPARENT || get_last_socket_error()!=ENOTSOCK) {
             sockerror("getpeerbyname");
             goto cleanup_local;
@@ -426,12 +425,12 @@ void client(int local) {
         /* Ignore ENOTSOCK error so 'local' doesn't have to be a socket */
     } else {
         /* It's a socket - lets setup options */
-        if(set_socket_options(local, 1)<0)
+        if(set_socket_options(local_rd, 1)<0)
             goto cleanup_local;
 
 #ifdef USE_LIBWRAP
         enter_critical_section(3);
-        request_init(&request, RQ_DAEMON, options.servname, RQ_FILE, local, 0);
+        request_init(&request, RQ_DAEMON, options.servname, RQ_FILE, local_rd, 0);
         fromhost(&request);
         result=hosts_access(&request);
         leave_critical_section(3);
@@ -535,17 +534,26 @@ cleanup_ssl: /* close SSL and reset sockets */
     SSL_free(ssl);
     ERR_remove_state(0);
 cleanup_remote: /* reset remote and local socket */
-    if ((options.option & OPT_REMOTE) &&
-            setsockopt(remote, SOL_SOCKET, SO_LINGER,
-            (char *)&l, sizeof(l)) < 0 && get_last_socket_error()!=ENOTSOCK)
-        sockerror("linger (remote)");
+    if(options.option&OPT_REMOTE)
+        if(setsockopt(remote, SOL_SOCKET, SO_LINGER,
+                (char *)&l, sizeof(l)) &&
+                get_last_socket_error()!=ENOTSOCK)
+            sockerror("linger (remote)");
     closesocket(remote);
 cleanup_local: /* reset local socket */
-    if(local!=STDIO_FILENO) {
-        if(!((options.option & OPT_CLIENT) &&
-                (options.option & OPT_PROGRAM)) &&
-                setsockopt(local, SOL_SOCKET, SO_LINGER,
-                (char *)&l, sizeof(l)) < 0 && get_last_socket_error()!=ENOTSOCK)
+    if(local==STDIO_FILENO) {
+        if(setsockopt(local_rd, SOL_SOCKET, SO_LINGER,
+                (char *)&l, sizeof(l)) &&
+                get_last_socket_error()!=ENOTSOCK)
+            sockerror("linger (local_rd)");
+        if(setsockopt(local_wr, SOL_SOCKET, SO_LINGER,
+                (char *)&l, sizeof(l)) &&
+                get_last_socket_error()!=ENOTSOCK)
+            sockerror("linger (local_wr)");
+    } else {
+        if(setsockopt(local, SOL_SOCKET, SO_LINGER,
+                (char *)&l, sizeof(l)) &&
+                get_last_socket_error()!=ENOTSOCK)
             sockerror("linger (local)");
         closesocket(local);
     }
@@ -690,10 +698,11 @@ static int transfer(int sock_rfd, int sock_wfd,
                 log(LOG_DEBUG, "SSL_write returned WANT_ - retry");
                 break;
             case SSL_ERROR_SYSCALL:
-                if(num) { /* not EOF */
-                    sockerror("SSL_write (socket)");
+                if(num==-1) { /* not EOF */
+                    sockerror("SSL_write (ERROR_SYSCALL)");
                     goto error;
                 }
+                log(LOG_DEBUG, "Unexpected socket close on SSL_write");
             case SSL_ERROR_ZERO_RETURN: /* Is it possible? */
                 log(LOG_DEBUG, "SSL closed on write");
                 ssl_wr=0;
@@ -754,10 +763,11 @@ static int transfer(int sock_rfd, int sock_wfd,
                 log(LOG_DEBUG, "SSL_read returned WANT_ - retry");
                 break;
             case SSL_ERROR_SYSCALL:
-                if(num) { /* not EOF */
-                    sockerror("SSL_read (socket)");
+                if(num==-1) { /* not EOF */
+                    sockerror("SSL_read (SSL_ERROR_SYSCALL)");
                     goto error;
                 }
+                log(LOG_DEBUG, "Unexpected socket close on SSL_read");
             case SSL_ERROR_ZERO_RETURN:
                 log(LOG_DEBUG, "SSL closed on read");
                 ssl_rd=0;

@@ -240,10 +240,6 @@ void parse_options(int argc, char *argv[]) {
     }
 #endif
     if (options.option & OPT_CLIENT) {
-        if (!(options.option & OPT_REMOTE)) {
-            log(LOG_ERR, "Remote service must be specified");
-            print_info();
-        }
         if (options.option & OPT_TRANSPARENT) {
             log(LOG_ERR,
                 "Client mode not available in transparent proxy mode");

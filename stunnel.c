@@ -646,7 +646,7 @@ static void local_handler(int sig) { /* sigchld handler for -l processes */
     int pid, status;
 
     pid=wait(&status);
-    log(LOG_DEBUG, "Local process %s[%d] finished with code %d)",
+    log(LOG_DEBUG, "Local process %s[%d] finished with code %d",
         options.servname, pid, status);
     signal(SIGCHLD, local_handler);
 }
