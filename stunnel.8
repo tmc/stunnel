@@ -93,7 +93,7 @@
 .nr % 0
 .rr F
 .\}
-.TH STUNNEL.OUT 1 " " "11/Nov/2001" " "
+.TH STUNNEL.OUT 1 " " "23/Dec/2001" " "
 .UC
 .if n .hy 0
 .if n .na
@@ -275,12 +275,14 @@ in server mode. Note that this option will not combine with proxy mode
 (\-r) unless the client's default route to the target machine lies
 through the host running stunnel, which cannot be localhost.
 .Ip "\fB\-p\fR pemfile" 4
-key/certificate \s-1PEM\s0 file name
+private key and certificate chain \s-1PEM\s0 file name
 .Sp
 A \s-1PEM\s0 is always needed in server mode (see \fIstunnel \-V\fR output for
-default). Specifying this flag in client mode will use this 
-key/certificate as a client side certificate.  Using client side certs
-is optional.
+default). Specifying this flag in client mode will use this key and
+certificate chain as a client side certificate chain.  Using client
+side certs is optional. The certificates must be in \s-1PEM\s0 format and
+must be sorted starting with the certificate to the highest level
+(root \s-1CA\s0).
 .Ip "\fB\-v\fR level" 4
 verify peer certificate
 .Ip "\(bu" 12

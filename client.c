@@ -69,9 +69,7 @@ static void init_remote(CLI *);
 static void init_ssl(CLI *);
 static void transfer(CLI *);
 static void nbio(CLI *, unsigned long);
-static void cleanup_ssl(CLI *);
-static void cleanup_remote(CLI *);
-static void cleanup_local(CLI *);
+static void cleanup(CLI *);
 
 static void print_cipher(CLI *);
 static int auth_libwrap(CLI *);
@@ -84,20 +82,28 @@ static int connect_remote(CLI *c);
 static int waitforsocket(int, int);
 static void reset(int, char *);
 
-FD d[MAX_FD];
+int max_fds;
+FD *d;
 
 void *client(void *local) {
     CLI *c;
 
+    log(LOG_DEBUG, "%s started", options.servname);
     c=calloc(1, sizeof(CLI));
     if(!c) {
-        log(LOG_ERR, "malloc failed");
+        log(LOG_ERR, "Memory allocation failed");
         closesocket((int)local);
         return NULL;
     }
     if((int)local==STDIO_FILENO) { /* Read from STDIN, write to STDOUT */
-        c->local_rfd=0;
-        c->local_wfd=1;
+        if((options.option&OPT_REMOTE) && (options.option&OPT_PROGRAM)) {
+            /* -r and -l options specified together */
+            /* spawn local program instead of stdio */
+            c->local_rfd=c->local_wfd=connect_local(c);
+        } else {
+            c->local_rfd=0;
+            c->local_wfd=1;
+        }
     } else
         c->local_rfd=c->local_wfd=(int)local;
     c->error=0;
@@ -112,11 +118,7 @@ void *client(void *local) {
             "Connection %s: %d bytes sent to SSL, %d bytes sent to socket",
              c->error ? "reset" : "closed", c->ssl_bytes, c->sock_bytes);
     }
-    if(c->ssl)
-        cleanup_ssl(c);
-    if(c->remote_fd>=0)
-        cleanup_remote(c);
-    cleanup_local(c);
+    cleanup(c);
     free(c);
 #ifndef USE_FORK
     enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
@@ -169,7 +171,6 @@ static void init_client(CLI *c) {
 static void init_local(CLI *c) {
     int addrlen;
 
-    log(LOG_DEBUG, "%s started", options.servname);
     addrlen=sizeof(c->addr);
 
     if(getpeername(c->local_rfd, (struct sockaddr *)&c->addr, &addrlen)<0) {
@@ -209,6 +210,8 @@ static void init_local(CLI *c) {
 }
 
 static void init_remote(CLI *c) {
+    int fd;
+
     /* create connection to host/service */
     if(options.local_ip)
         c->ip=*options.local_ip;
@@ -217,22 +220,27 @@ static void init_remote(CLI *c) {
     else
         c->ip=0;
     /* Setup c->remote_fd, now */
-    if(options.option&OPT_REMOTE) { /* remote host */
-        if((c->remote_fd=connect_remote(c))<0) {
-            c->error=1; /* Failed to connect remote server */
-            return;
-        }
-        log(LOG_DEBUG, "Remote host connected");
-        d[c->remote_fd].is_socket=1;
-    } else { /* local service */
-        if((c->remote_fd=connect_local(c))<0) {
-            c->error=1; /* Failed to spawn local service */
-            return;
-        }
-        d[c->remote_fd].is_socket=1;
-        log(LOG_DEBUG, "Local service connected");
+    if(options.option&OPT_REMOTE)
+        fd=connect_remote(c);
+    else /* NOT in remote mode */
+        fd=connect_local(c);
+    if(fd<0) {
+        log(LOG_ERR, "Failed to initialize remote file descriptor");
+        closesocket(fd);
+        c->error=1;
+        return;
     }
-    if(set_socket_options(c->remote_fd, 2)<0) {
+    if(fd>=max_fds) {
+        log(LOG_ERR, "Remote file descriptor out of range (%d>=%d)",
+            fd, max_fds);
+        closesocket(fd);
+        c->error=1;
+        return;
+    }
+    log(LOG_DEBUG, "Remote FD=%d initialized", fd);
+    c->remote_fd=fd;
+    d[fd].is_socket=1;
+    if(set_socket_options(fd, 2)<0) {
         c->error=1;
         return;
     }
@@ -362,7 +370,7 @@ static void transfer(CLI *c) { /* transfer data */
             case 0:
                 return;
             default:
-                memcpy(c->ssl_buff, c->ssl_buff+num, c->ssl_ptr-num);
+                memmove(c->ssl_buff, c->ssl_buff+num, c->ssl_ptr-num);
                 if(c->ssl_ptr==BUFFSIZE)
                     check_SSL_pending=1;
                 c->ssl_ptr-=num;
@@ -387,7 +395,7 @@ static void transfer(CLI *c) { /* transfer data */
 
             switch(SSL_get_error(c->ssl, num)) {
             case SSL_ERROR_NONE:
-                memcpy(c->sock_buff, c->sock_buff+num, c->sock_ptr-num);
+                memmove(c->sock_buff, c->sock_buff+num, c->sock_ptr-num);
                 c->sock_ptr-=num;
                 c->ssl_bytes+=num;
                 if(!sock_rd && !c->sock_ptr && ssl_wr) {
@@ -433,10 +441,12 @@ static void transfer(CLI *c) { /* transfer data */
                     log(LOG_DEBUG, "Socket read interrupted by a signal - retrying");
                     break;
                 }
+#if 0
                 if(get_last_socket_error()==EIO) {
                     log(LOG_DEBUG, "I/O error - retrying");
                     break;
                 }
+#endif
                 if(get_last_socket_error()==ECONNRESET)
                     log(LOG_NOTICE, "IPC reset (child died)");
                 else
@@ -530,57 +540,49 @@ static void nbio(CLI *c, unsigned long l) {
 #endif
 }
 
-static void cleanup_ssl(CLI *c) {
-    SSL_set_shutdown(c->ssl, SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN);
-    SSL_free(c->ssl);
-    ERR_remove_state(0);
-    return;
-}
-
-static void cleanup_remote(CLI *c) {
-    if(c->error)
-        reset(c->remote_fd, "linger (remote_fd)");
-    closesocket(c->remote_fd);
-}
-
-static void cleanup_local(CLI *c) {
-    if(c->local_rfd==c->local_wfd) {
+static void cleanup(CLI *c) {
+        /* Cleanup SSL */
+    if(c->ssl) { /* SSL initialized */
+        SSL_set_shutdown(c->ssl, SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN);
+        SSL_free(c->ssl);
+        ERR_remove_state(0);
+    }
+        /* Cleanup remote socket */
+    if(c->remote_fd>=0) { /* Remote socket initialized */
         if(c->error)
-            reset(c->local_rfd, "linger (local)");
-        closesocket(c->local_rfd);
-    } else {
-        if(c->error)
-            reset(c->local_rfd, "linger (local_rfd)");
-        if(c->error)
-            reset(c->local_wfd, "linger (local_wfd)");
+            reset(c->remote_fd, "linger (remote)");
+        closesocket(c->remote_fd);
+    }
+        /* Cleanup local socket */
+    if(c->local_rfd>=0) { /* Local socket initialized */
+        if(c->local_rfd==c->local_wfd) {
+            if(c->error)
+                reset(c->local_rfd, "linger (local)");
+            closesocket(c->local_rfd);
+        } else { /* STDIO */
+            if(c->error)
+                reset(c->local_rfd, "linger (local_rfd)");
+            if(c->error)
+                reset(c->local_wfd, "linger (local_wfd)");
+       }
     }
 }
 
 static void print_cipher(CLI *c) { /* print negotiated cipher */
-#if SSLEAY_VERSION_NUMBER > 0x0800
-    SSL_CIPHER *cipher;
-    char *ver;
-    int bits;
-#endif
-
 #if SSLEAY_VERSION_NUMBER <= 0x0800
     log(LOG_INFO, "%s opened with SSLv%d, cipher %s",
         options.servname, ssl->session->ssl_version, SSL_get_cipher(c->ssl));
 #else
-    switch(c->ssl->session->ssl_version) {
-    case SSL2_VERSION:
-        ver="SSLv2"; break;
-    case SSL3_VERSION:
-        ver="SSLv3"; break;
-    case TLS1_VERSION:
-        ver="TLSv1"; break;
-    default:
-        ver="UNKNOWN";
-    }
+    SSL_CIPHER *cipher;
+    char buf[STRLEN];
+    int len;
+
     cipher=SSL_get_current_cipher(c->ssl);
-    SSL_CIPHER_get_bits(cipher, &bits);
-    log(LOG_INFO, "%s opened with %s, cipher %s (%u bits)",
-        options.servname, ver, SSL_CIPHER_get_name(cipher), bits);
+    SSL_CIPHER_description(cipher, buf, STRLEN);
+    len=strlen(buf);
+    if(len>0)
+        buf[len-1]='\0';
+    log(LOG_INFO, "Negotiated ciphers: %s", buf);
 #endif
 }
 
@@ -706,10 +708,10 @@ static int connect_local(CLI *c) { /* spawn local process */
         closesocket(fd[0]);
         dup2(fd[1], 0);
         dup2(fd[1], 1);
-        if (!options.foreground)
+        if(!options.foreground)
             dup2(fd[1], 2);
         closesocket(fd[1]);
-        if (c->ip) {
+        if(c->ip) {
             putenv("LD_PRELOAD=" libdir "/stunnel.so");
             /* For Tru64 _RLD_LIST is used instead */
             putenv("_RLD_LIST=" libdir "/stunnel.so:DEFAULT");

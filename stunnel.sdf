@@ -128,11 +128,13 @@ machine lies through the host running stunnel, which cannot be localhost.
 
 =item B<-p> pemfile
 
-key/certificate PEM file name
+private key and certificate chain PEM file name
 
 A PEM is always needed in server mode (see I<stunnel -V> output for default).
-Specifying this flag in client mode will use this  key/certificate as a
-client side certificate.  Using client side certs is optional.
+Specifying this flag in client mode will use this key and certificate chain
+as a client side certificate chain.  Using client side certs is optional.
+The certificates must be in PEM format and must be sorted starting with the
+certificate to the highest level (root CA).  
 
 =item B<-v> level
 

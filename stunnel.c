@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-2001 Michal Trojnara <Michal.Trojnara@mirt.net>
  *                 All Rights Reserved
  *
- *   Version:      3.21c            (stunnel.c)
- *   Date:         2001.11.11
+ *   Version:      3.22             (stunnel.c)
+ *   Date:         2001.12.20
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -35,6 +35,7 @@
 
 #include "common.h"
 #include "prototypes.h"
+#include "client.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/crypto.h> /* for SSLeay_version */
@@ -144,6 +145,12 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
 #endif
         daemon_loop();
     } else { /* inetd mode */
+        max_fds=16; /* Just in case */
+        d=calloc(max_fds, sizeof(FD));
+        if(!d) {
+            log(LOG_ERR, "Memory allocation failed");
+            exit(1);
+        }
         options.clients = 1;
         client((void *)STDIO_FILENO); /* rd fd=0, wr fd=1 */
     }
@@ -157,7 +164,7 @@ static void daemon_loop() {
     int ls, s;
     struct sockaddr_in addr;
     int addrlen;
-    int max_clients, max_fds, fds_ulimit=-1;
+    int max_clients, fds_ulimit=-1;
 
 #if defined HAVE_SYSCONF
     fds_ulimit=sysconf(_SC_OPEN_MAX);
@@ -176,6 +183,11 @@ static void daemon_loop() {
         max_fds=fds_ulimit;
     else
         max_fds=FD_SETSIZE;
+    d=calloc(max_fds, sizeof(FD));
+    if(!d) {
+        log(LOG_ERR, "Memory allocation failed");
+        exit(1);
+    }
     max_clients=max_fds>=256 ? max_fds*125/256 : (max_fds-6)/2;
     log(LOG_NOTICE, "FD_SETSIZE=%d, file ulimit=%d%s -> %d clients allowed",
         FD_SETSIZE, fds_ulimit, fds_ulimit<0?" (unlimited)":"", max_clients);
@@ -198,31 +210,34 @@ static void daemon_loop() {
             sockerror("accept");
             continue;
         }
+        enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
+        log(LOG_DEBUG, "%s accepted FD=%d from %s:%d", options.servname, s,
+            inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        leave_critical_section(CRIT_NTOA);
+        if(options.clients>=max_clients) {
+            log(LOG_WARNING, "Connection rejected: too many clients (>=%d)",
+                max_clients);
+            closesocket(s);
+            continue;
+        }
+        if(s>=max_fds) {
+            log(LOG_ERR,
+                "Connection rejected: file descriptor out of range (>=%d)",
+                max_fds);
+            closesocket(s);
+            continue;
+        }
 #ifdef FD_CLOEXEC
         fcntl(s, F_SETFD, FD_CLOEXEC); /* close socket in child execvp */
 #endif
-        if(options.clients<max_clients) {
-            if(create_client(ls, s, client)) {
-                enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
-                log(LOG_WARNING,
-                    "%s create_client failed - connection from %s:%d REJECTED",
-                    options.servname,
-                    inet_ntoa(addr.sin_addr),
-                    ntohs(addr.sin_port));
-                leave_critical_section(CRIT_NTOA);
-            } else {
-                enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
-                options.clients++;
-                leave_critical_section(CRIT_CLIENTS);
-            }
-        } else {
-            enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
-            log(LOG_WARNING,
-                "%s has too many clients - connection from %s:%d REJECTED",
-                options.servname, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-            leave_critical_section(CRIT_NTOA);
+        if(create_client(ls, s, client)) {
+            log(LOG_ERR, "Connection rejected: create_client failed");
             closesocket(s);
+            continue;
         }
+        enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
+        options.clients++;
+        leave_critical_section(CRIT_CLIENTS);
     }
     log(LOG_ERR, "INTERNAL ERROR: End of infinite loop");
 }

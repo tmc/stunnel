@@ -78,9 +78,9 @@ transparent proxy mode
 Re-write address to appear as if wrapped daemon is connecting from the SSL client machine instead of the machine running stunnel. Available only on some operating systems (Linux only, we believe) and then only in server mode. Note that this option will not combine with proxy mode (-r) unless the client's default route to the target machine lies through the host running stunnel, which cannot be localhost.</UL>
 <P STYLE="font-weight: bold"><B><B>-p</B> pemfile</B></P>
 <UL>
-key/certificate PEM file name
+private key and certificate chain PEM file name
 <BR>
-A PEM is always needed in server mode (see <I>stunnel -V</I> output for default). Specifying this flag in client mode will use this  key/certificate as a client side certificate.  Using client side certs is optional.</UL>
+A PEM is always needed in server mode (see <I>stunnel -V</I> output for default). Specifying this flag in client mode will use this key and certificate chain as a client side certificate chain.  Using client side certs is optional. The certificates must be in PEM format and must be sorted starting with the certificate to the highest level (root CA).</UL>
 <P STYLE="font-weight: bold"><B><B>-v</B> level</B></P>
 <UL>
 verify peer certificate<UL>

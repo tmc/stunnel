@@ -87,7 +87,7 @@
 #ifdef USE_WIN32
 
 #ifndef VERSION
-#define VERSION "3.20"
+#define VERSION "3.22"
 #endif
 
 #ifdef __MINGW32__
