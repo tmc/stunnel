@@ -23,9 +23,9 @@
 
 /* Needed so we know which version of OpenSSL we're using */
 #ifdef HAVE_OPENSSL
-#include <openssl/crypto.h>
+#include <openssl/ssl.h>
 #else
-#include <crypto.h>
+#include <ssl.h>
 #endif
 
 extern server_options options;
@@ -55,7 +55,7 @@ void parse_options(int argc, char *argv[]) {
     char *servname_selected=NULL;
 
     options.option=0;
-    options.verify_level=0x00; /* SSL_VERIFY_NONE */
+    options.verify_level=-1;
     options.verify_use_only_my=0;
     options.debug_level=5;
 #ifndef USE_WIN32
@@ -99,15 +99,15 @@ void parse_options(int argc, char *argv[]) {
                 safecopy(options.pem, optarg);
                 break;
             case 'v':
+                options.verify_level=SSL_VERIFY_NONE;
                 switch(atoi(optarg)) {
                 case 3:
                     options.verify_use_only_my=1;
                 case 2:
-                    options.verify_level |= 0x02;
-                        /* SSL_VERIFY_FAIL_IF_NO_PEER_CERT */
+                    options.verify_level|=SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
                 case 1:
-                    options.verify_level |= 0x01;
-                        /* SSL_VERIFY_PEER */
+                    options.verify_level|=SSL_VERIFY_PEER;
+                case 0:
                     break;
                 default:
                     log(LOG_ERR, "Bad verify level");

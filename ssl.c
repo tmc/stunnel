@@ -347,7 +347,9 @@ static RSA *make_temp_key(int keylen) {
 #endif /* NO_RSA */
 
 static void verify_init() {
-    if(options.verify_level==SSL_VERIFY_NONE) {
+    if(options.verify_level<0)
+        return; /* No certificate verification */
+    if(options.verify_level==0) {
         /* Request a certificate, but ignore it */
         SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
         return;

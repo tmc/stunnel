@@ -4,8 +4,9 @@ Version 3.21, 2001.09.xx, urgency: LOW:
 * SSL_CLIENT_DN and SSL_CLIENT_I_DN environment variables set in local mode
   (-l) process.  This feature doesn't work if
   client mode (-c) or protocol negotiation (-n) is used.
-* Stunnel always requests peer certificate.  It's just ignored by default.
+* Stunnel always requests peer certificate and ignores it with -v 0.
 * Problem with errno and posix threads fixed.
+* It is assumed that system has getopt() if it has getopt.h header file.
 * Catching zombies rewritten.
 * SSL mode changed for OpenSSL >= 0.9.6.
 * close-on-exec option used to avoid socket inheriting.
@@ -19,6 +20,7 @@ Version 3.21, 2001.09.xx, urgency: LOW:
 * No need for "goto" any more.
 * New Makefile "test" rule.  It performs basic test of
   standalone/inetd, remote/local and server/client mode.
+* pop3 server mode support added.
 
 Version 3.20, 2001.08.15, urgency: LOW:
 * setsockopt() optlen set according to the optval for Solaris.

@@ -182,6 +182,8 @@ typedef unsigned long long u64;
 #include <sys/wait.h>    /* wait */
 #ifdef HAVE_GETOPT_H
 #include <getopt.h>      /* getopt */
+/* Assume that we have getopt() function */
+#define HAVE_GETOPT      1
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>      /* getpid, fork, execvp, exit */

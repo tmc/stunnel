@@ -92,8 +92,8 @@ void *client(void *local) {
     } else
         c->local_rfd=c->local_wfd=(int)local;
     c->error=0;
-    c->cleanup_remote_needed=0;
-    c->cleanup_ssl_needed=0;
+    c->remote_fd=-1;
+    c->ssl=NULL;
     init_client(c);
     if(!c->error) {
         nbio(c, 1);
@@ -103,9 +103,9 @@ void *client(void *local) {
             "Connection %s: %d bytes sent to SSL, %d bytes sent to socket",
              c->error ? "reset" : "closed", c->ssl_bytes, c->sock_bytes);
     }
-    if(c->cleanup_ssl_needed)
+    if(c->ssl)
         cleanup_ssl(c);
-    if(c->cleanup_remote_needed)
+    if(c->remote_fd>=0)
         cleanup_remote(c);
     cleanup_local(c);
 #ifndef USE_WIN32
@@ -227,7 +227,6 @@ static void init_remote(CLI *c) {
         d[c->remote_fd].is_socket=1;
         log(LOG_DEBUG, "Local service connected");
     }
-    c->cleanup_remote_needed=1;
     if(set_socket_options(c->remote_fd, 2)<0) {
         c->error=1;
         return;
@@ -240,7 +239,6 @@ static void init_ssl(CLI *c) {
         c->error=1;
         return;
     }
-    c->cleanup_ssl_needed=1;
 #if SSLEAY_VERSION_NUMBER >= 0x0922
     SSL_set_session_id_context(c->ssl, sid_ctx, strlen(sid_ctx));
 #endif

@@ -52,7 +52,6 @@ typedef struct {
     int sock_rfd, sock_wfd; /* Read and write socket descriptors */
     int ssl_rfd, ssl_wfd; /* Read and write SSL descriptors */
     int sock_bytes, ssl_bytes; /* Bytes written to socket and ssl */
-    int cleanup_remote_needed, cleanup_ssl_needed; /* Need to clean up */
 } CLI;
 
 typedef enum {
@@ -60,8 +59,7 @@ typedef enum {
     STATE_ACCEPT,       /* On accept() */
     STATE_CONNECT,      /* On connect() */
     STATE_NEGOTIATE,    /* On negotiate() */
-    STATE_SSL_ACCEPT,   /* On SSL_accept() */
-    STATE_SSL_CONNECT,  /* On SSL_connect() */
+    STATE_SSL_INIT,     /* On SSL_accept() or SSL_connect() */
     STATE_SSL_SHUTDOWN, /* On SSL_shutdown() */
     STATE_SSL,          /* On SSL_read or SSL_write */
     STATE_PLAIN,        /* On readsocket() or writesocket() */

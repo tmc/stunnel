@@ -35,7 +35,7 @@ static int telnet_client(CLI *);
 static int telnet_server(CLI *);
 static int RFC2487(int);
 
-int negotiate(char *protocol, int client, CLI * c) {
+int negotiate(char *protocol, int client, CLI *c) {
     if(!protocol)
         return 0; /* No protocol negotiations */
     if(!c)
@@ -77,17 +77,17 @@ int negotiate(char *protocol, int client, CLI * c) {
     return -1;
 }
 
-static int smb_client(CLI * c) {
+static int smb_client(CLI *c) {
     log(LOG_ERR, "Protocol not supported");
     return -1;
 }
 
-static int smb_server(CLI * c) {
+static int smb_server(CLI *c) {
     log(LOG_ERR, "Protocol not supported");
     return -1;
 }
 
-static int smtp_client(CLI * c) {
+static int smtp_client(CLI *c) {
     char line[STRLEN];
     
     do { /* Copy multiline greeting */
@@ -121,7 +121,7 @@ static int smtp_client(CLI * c) {
     return 0;
 }
 
-static int smtp_server(CLI * c) {
+static int smtp_server(CLI *c) {
     char line[STRLEN];
 
     if(RFC2487(c->local_rfd)==0)
@@ -150,10 +150,11 @@ static int smtp_server(CLI * c) {
     return 0;
 }
 
-static int pop3_client(CLI * c) {
+static int pop3_client(CLI *c) {
     char line[STRLEN];
 
-    fdscanf(c->remote_fd, "%[^\n]", line);
+    if(fdscanf(c->remote_fd, "%[^\n]", line)<0)
+        return -1;
     if(strncmp(line,"+OK ",4)) {
         log(LOG_ERR, "Unknown server welcome");
         return -1;
@@ -162,7 +163,8 @@ static int pop3_client(CLI * c) {
         return -1;
     if(fdprintf(c->remote_fd, "STLS")<0)
         return -1;
-    fdscanf(c->remote_fd, "%[^\n]", line);
+    if(fdscanf(c->remote_fd, "%[^\n]", line)<0)
+        return -1;
     if(strncmp(line,"+OK ",4)) {
         log(LOG_ERR, "Server does not support TLS");
         return -1;
@@ -170,15 +172,36 @@ static int pop3_client(CLI * c) {
     return 0;
 }
 
-static int pop3_server(CLI * c) {
-    log(LOG_ERR, "Protocol not supported in server mode");
-    return -1;
-}
-
-static int nntp_client(CLI * c) {
+static int pop3_server(CLI *c) {
     char line[STRLEN];
 
-    fdscanf(c->remote_fd, "%[^\n]", line);
+    if(fdscanf(c->remote_fd, "%[^\n]", line)<0)
+        return -1;
+    if(fdprintf(c->local_wfd, "%s + stunnel", line)<0)
+        return -1;
+    if(fdscanf(c->local_rfd, "%[^\n]", line)<0)
+        return -1;
+    if(!strncmp(line, "CAPA", 4)) { /* Client wants RFC 2449 extensions */
+        if(fdprintf(c->local_wfd, "-ERR Stunnel does not support capabilities")<0)
+            return -1;
+        if(fdscanf(c->local_rfd, "%[^\n]", line)<0)
+            return -1;
+    }
+    if(strncmp(line, "STLS", 4)) {
+        log(LOG_ERR, "Client does not want TLS");
+        return -1;
+    }
+    if(fdprintf(c->local_wfd, "+OK Stunnel starts TLS negotiation")<0)
+        return -1;
+
+    return 0;
+}
+
+static int nntp_client(CLI *c) {
+    char line[STRLEN];
+
+    if(fdscanf(c->remote_fd, "%[^\n]", line)<0)
+        return -1;
     if(strncmp(line,"200 ",4) && strncmp(line,"201 ",4)) {
         log(LOG_ERR, "Unknown server welcome");
         return -1;
@@ -187,7 +210,8 @@ static int nntp_client(CLI * c) {
         return -1;
     if(fdprintf(c->remote_fd, "STARTTLS")<0)
         return -1;
-    fdscanf(c->remote_fd, "%[^\n]", line);
+    if(fdscanf(c->remote_fd, "%[^\n]", line)<0)
+        return -1;
     if(strncmp(line,"382 ",4)) {
         log(LOG_ERR, "Server does not support TLS");
         return -1;
@@ -195,17 +219,17 @@ static int nntp_client(CLI * c) {
     return 0;
 }
 
-static int nntp_server(CLI * c) {
+static int nntp_server(CLI *c) {
     log(LOG_ERR, "Protocol not supported in server mode");
     return -1;
 }
 
-static int telnet_client(CLI * c) {
+static int telnet_client(CLI *c) {
     log(LOG_ERR, "Protocol not supported");
     return -1;
 }
 
-static int telnet_server(CLI * c) {
+static int telnet_server(CLI *c) {
     log(LOG_ERR, "Protocol not supported");
     return -1;
 }
