@@ -899,7 +899,7 @@ else
 fi
 
 
-VERSION="3.21a"
+VERSION="3.21b"
 
 cat >> confdefs.h <<EOF
 #define VERSION "$VERSION"

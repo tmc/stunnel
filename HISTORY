@@ -1,5 +1,8 @@
 stunnel         Universal SSL tunnel
 
+Version 3.21b, 2001.11.03, urgency: MEDIUM:
+* File descriptor leak on failed connect() fixed.
+
 Version 3.21a, 2001.10.31, urgency: MEDIUM:
 * Small bug in Makefile fixed.
 

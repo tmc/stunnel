@@ -799,6 +799,7 @@ static int connect_remote(CLI *c) { /* connect to remote host */
         addr.sin_port=htons(0);
         if(bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
             sockerror("bind transparent");
+            closesocket(s);
             return -1;
         }
     }
@@ -816,6 +817,7 @@ static int connect_remote(CLI *c) { /* connect to remote host */
             return s; /* success */
     }
     sockerror("remote connect");
+    closesocket(s);
     return -1;
 }
 
