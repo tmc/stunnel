@@ -8,7 +8,7 @@ stunnel - universal SSL tunnel
 
 B<stunnel>
 	S<[-c | -T]>
-	S<[-D level]>
+	S<[-D [facility.]level]>
 	S<[-C cipherlist]>
 	S<[-p pemfile]>
 	S<[-v level]>
@@ -60,8 +60,17 @@ Print stunnel version and compile time defaults
 
 Debugging level
 
-Level is a number between 0 (no logging at all) and 7 (show
-lots of debugging info)
+Level is a one of the syslog level names or numbers
+emerg (0), alert (1), crit (2), err (3), warning (4), notice (5),
+info (6), or debug (7).  All logs for the specified level and
+all levels numerically less than it will be shown.  Use -D debug or
+-D 7 for greatest debugging output.  The default is notice (5).
+
+The syslog facility 'daemon' will be used
+unless a facility name is supplied.  (Facilities are not supported
+on windows.)
+
+Case is ignored for both facilities and levels.
 
 =item B<-C> cipherlist
 
@@ -80,9 +89,13 @@ default: server mode
 
 transparent proxy mode
 
-Available only in server mode, re-write address to appear
-as if connection is originating from actual SSL client machine.
-Only available on some OS versions.
+Re-write address to appear as if wrapped daemon is connecting
+from the SSL client machine instead of the machine running stunnel.
+Available only on some operating systems (Linux only, we believe)
+and then only in server mode. Note that this option will not combine
+with proxy mode (-r) unless the client's default route to the target
+machine lies through the host running stunnel, which cannot be localhost.
+
 
 =item B<-p> pemfile
 
@@ -163,7 +176,13 @@ explicitly set I<-A> and/or B<-a> as desired.
 
 session cache timeout
 
-default: 300 s.
+default: 300 seconds.
+
+=item B<-N> servicename
+
+Service name to use for tcpwrappers. If not specified then a
+tcpwrapper service name will be generated automatically for you.
+This will also be used when auto-generating pid filenames.
 
 =item B<-u> ident_username
 
@@ -377,6 +396,10 @@ internet ``super-server''
 =item F<http://stunnel.mirt.net/>
 
 Stunnel homepage
+
+=item F<http://www.stunnel.org/>
+
+Stunnel Frequently Asked Questions
 
 =item F<http://www.openssl.org/>
 

@@ -18,7 +18,7 @@
 <H1><A NAME="NAME">1. NAME</A></H1>
 <P>stunnel - universal SSL tunnel</P>
 <H1><A NAME="SYNOPSIS">2. SYNOPSIS</A></H1>
-<P><B>stunnel</B> [-c&nbsp;|&nbsp;-T] [-D&nbsp;level] [-C&nbsp;cipherlist] [-p&nbsp;pemfile] [-v&nbsp;level] [-A&nbsp;certfile] [-S&nbsp;sources] [-a&nbsp;directory] [-t&nbsp;timeout] [-u&nbsp;ident_username] [-s&nbsp;setuid_user] [-g&nbsp;setgid_group] [-n&nbsp;protocol] [-P&nbsp;{&nbsp;dir/&nbsp;|&nbsp;filename&nbsp;|&nbsp;none&nbsp;}&nbsp;] [-B&nbsp;bytes] [-R&nbsp;randfile] [-W] [-E&nbsp;socket] [-d&nbsp;[host:]port&nbsp;[-f]&nbsp;] [&nbsp;-r&nbsp;[host:]port&nbsp;|&nbsp;{&nbsp;-l&nbsp;|&nbsp;-L&nbsp;}&nbsp;program&nbsp;[--&nbsp;progname&nbsp;args]&nbsp;]</P>
+<P><B>stunnel</B> [-c&nbsp;|&nbsp;-T] [-D&nbsp;[facility.]level] [-C&nbsp;cipherlist] [-p&nbsp;pemfile] [-v&nbsp;level] [-A&nbsp;certfile] [-S&nbsp;sources] [-a&nbsp;directory] [-t&nbsp;timeout] [-u&nbsp;ident_username] [-s&nbsp;setuid_user] [-g&nbsp;setgid_group] [-n&nbsp;protocol] [-P&nbsp;{&nbsp;dir/&nbsp;|&nbsp;filename&nbsp;|&nbsp;none&nbsp;}&nbsp;] [-B&nbsp;bytes] [-R&nbsp;randfile] [-W] [-E&nbsp;socket] [-d&nbsp;[host:]port&nbsp;[-f]&nbsp;] [&nbsp;-r&nbsp;[host:]port&nbsp;|&nbsp;{&nbsp;-l&nbsp;|&nbsp;-L&nbsp;}&nbsp;program&nbsp;[--&nbsp;progname&nbsp;args]&nbsp;]</P>
 <H1><A NAME="DESCRIPTION">3. DESCRIPTION</A></H1>
 <P>The <B>stunnel</B> program is designed to work as <I>SSL</I> encryption wrapper between remote clients and local (<I>inetd</I>-startable) or remote servers. The concept is that having non-SSL aware daemons running on your system you can easily set them up to communicate with clients over secure SSL channels.</P>
 <P><B>stunnel</B> can be used to add SSL functionality to commonly used <I>inetd</I> daemons like POP-2, POP-3, and IMAP servers, to standalone daemons like NNTP, SMTP and HTTP, and in tunneling PPP over network sockets without changes to the source code.</P>
@@ -34,7 +34,11 @@ Print stunnel version and compile time defaults</UL>
 <UL>
 Debugging level
 <BR>
-Level is a number between 0 (no logging at all) and 7 (show lots of debugging info)</UL>
+Level is a one of the syslog level names or numbers emerg (0), alert (1), crit (2), err (3), warning (4), notice (5), info (6), or debug (7).  All logs for the specified level and all levels numerically less than it will be shown.  Use -D debug or -D 7 for greatest debugging output.  The default is notice (5).
+<BR>
+The syslog facility 'daemon' will be used unless a facility name is supplied.  (Facilities are not supported on windows.)
+<BR>
+Case is ignored for both facilities and levels.</UL>
 <P STYLE="font-weight: bold"><B><B>-C</B> cipherlist</B></P>
 <UL>
 Select permitted SSL ciphers
@@ -49,7 +53,7 @@ default: server mode</UL>
 <UL>
 transparent proxy mode
 <BR>
-Available only in server mode, re-write address to appear as if connection is originating from actual SSL client machine. Only available on some OS versions.</UL>
+Re-write address to appear as if wrapped daemon is connecting from the SSL client machine instead of the machine running stunnel. Available only on some operating systems (Linux only, we believe) and then only in server mode. Note that this option will not combine with proxy mode (-r) unless the client's default route to the target machine lies through the host running stunnel, which cannot be localhost.</UL>
 <P STYLE="font-weight: bold"><B><B>-p</B> pemfile</B></P>
 <UL>
 key/certificate PEM file name
@@ -97,7 +101,10 @@ In general, to avoid hurting one's brain, use <I>-S 0</I> and explicitly set <I>
 <UL>
 session cache timeout
 <BR>
-default: 300 s.</UL>
+default: 300 seconds.</UL>
+<P STYLE="font-weight: bold"><B><B>-N</B> servicename</B></P>
+<UL>
+Service name to use for tcpwrappers. If not specified then a tcpwrapper service name will be generated automatically for you. This will also be used when auto-generating pid filenames.</UL>
 <P STYLE="font-weight: bold"><B><B>-u</B> ident_username</B></P>
 <UL>
 Use IDENT (RFC 1413) username checking</UL>
@@ -204,6 +211,9 @@ internet ``super-server''</UL>
 <P STYLE="font-weight: bold"><B><A HREF="http://stunnel.mirt.net/">http://stunnel.mirt.net/</A></B></P>
 <UL>
 Stunnel homepage</UL>
+<P STYLE="font-weight: bold"><B><A HREF="http://www.stunnel.org/">http://www.stunnel.org/</A></B></P>
+<UL>
+Stunnel Frequently Asked Questions</UL>
 <P STYLE="font-weight: bold"><B><A HREF="http://www.openssl.org/">http://www.openssl.org/</A></B></P>
 <UL>
 OpenSSL project website</UL>

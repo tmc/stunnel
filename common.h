@@ -54,7 +54,7 @@
 
 #ifdef USE_WIN32
 
-#define VERSION "3.10beta2"
+#define VERSION "3.10"
 #ifdef __MINGW32__
 #define HOST "x86-pc-mingw32-gnu"
 #else
@@ -159,7 +159,8 @@ typedef struct {
     char servname[STRLEN];  /* service name for loggin & permission checking */
     int verify_level;
     int verify_use_only_my;
-    int debug_level;
+    int debug_level;		/* debug level for syslog */
+    int facility;		/* debug facility for syslog */
     long session_timeout;
     char *cipher_list;
     char *username;
@@ -195,6 +196,7 @@ int negotiate(char *, int, int, int);
 void log_open();
 void log_close();
 void log(int, char *, ...);
+int  parse_debug_level(char *);
 
 /* Prototypes for sthreads.c */
 

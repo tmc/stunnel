@@ -22,6 +22,11 @@ LIBS=@LIBS@
 OBJS=stunnel.o ssl.o protocol.o sthreads.o pty.o log.o
 DESTFILES=$(sbindir)/stunnel $(libdir)/stunnel.so $(man8dir)/stunnel.8  $(PEM_DIR)/stunnel.pem
 
+WINGCC=i386-mingw32msvc-gcc 
+WINCFLAGS=-O2 -Wall -DUSE_WIN32 -DHAVE_OPENSSL -I../openssl-0.9.6/outinc
+WINSRC=stunnel.c ssl.c protocol.c sthreads.c log.c
+WINLIBS=-L../openssl-0.9.6/out -leay32 -lssl32 -lwsock32 -lgdi32
+
 # standard external rules
 
 all: stunnel stunnel.8 stunnel.html stunnel.so stunnel.pem
@@ -55,6 +60,9 @@ installdirs: mkinstalldirs
 	chmod a=rwx,+t $(piddir)
 
 # non-standard external rules
+
+stunnel.exe: $(WINSRC)
+	$(WINGCC) $(WINCFLAGS) -s -o stunnel.exe $(WINSRC) $(WINLIBS)
 
 stunnel.8: stunnel.sdf
 	sdf -2man stunnel.sdf > stunnel.8
