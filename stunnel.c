@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-2000 Michal Trojnara <Michal.Trojnara@mirt.net>
  *                 All Rights Reserved
  *
- *   Version:      3.9                   (stunnel.c)
- *   Date:         2000.12.13
+ *   Version:      3.10                  (stunnel.c)
+ *   Date:         2000.12.16
  *   
  *   Author:   		Michal Trojnara  <Michal.Trojnara@mirt.net>
  *   SSL support:  	Adam Hernik      <adas@infocentrum.com>
@@ -455,14 +455,17 @@ static void daemon_loop()
             continue;
         }
         if(options.clients<MAX_CLIENTS) {
-            if(create_client(ls, s, client))
+            if(create_client(ls, s, client)) {
                 log(LOG_WARNING,
-                    "%s fork failed - connection from %s:%d REJECTED",
+                    "%s create_client failed - connection from %s:%d REJECTED",
                     options.servname,
                     inet_ntoa(addr.sin_addr),
                     ntohs(addr.sin_port));
-            else
+            } else {
+                enter_critical_section(2); /* for multi-cpu machines */
                 options.clients++;
+                leave_critical_section(2);
+            }
         } else {
             log(LOG_WARNING,
                 "%s has too many clients - connection from %s:%d REJECTED",
@@ -912,10 +915,9 @@ static void sigchld_handler(int sig) /* Our child is dead */
 {
     int pid, status;
 
-    options.clients--; /* One client less */
     pid=wait(&status);
     log(LOG_DEBUG, "%s[%d] finished with code %d (%d left)",
-        options.servname, pid, status, options.clients);
+        options.servname, pid, status, --options.clients);
     signal(SIGCHLD, sigchld_handler);
 }
 #endif

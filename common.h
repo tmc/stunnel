@@ -27,7 +27,6 @@
 #define OPT_TRANSPARENT 0x40
 #define OPT_PTY         0x80
 
-
 /* Certificate defaults */
 
 /* let's not use openssl defaults unless told to at compile time. */
@@ -55,7 +54,7 @@
 
 #ifdef USE_WIN32
 
-#define VERSION "3.9"
+#define VERSION "3.10beta1"
 #ifdef __MINGW32__
 #define HOST "x86-pc-mingw32-gnu"
 #else
@@ -199,6 +198,8 @@ void log(int, char *, ...);
 
 /* Prototypes for sthreads.c */
 
+void enter_critical_section(int);
+void leave_critical_section(int);
 void sthreads_init(void);
 unsigned long process_id(void);
 unsigned long thread_id(void);
