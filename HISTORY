@@ -1,13 +1,14 @@
 stunnel         Universal SSL tunnel
 
 Version 3.21, 2001.09.xx, urgency: LOW:
+* Problem with errno and posix threads fixed.
 * Catching zombies rewritten.
 * SSL mode changed for OpenSSL >= 0.9.6.
 * close-on-exec option used to avoid socket inheriting.
 * Rate of accept() errors limited to 1 per 10 seconds.
 * Buffer size increased from 8KB to 16KB.
 * fdscanf()/fdprintf() changes:
-   - non-blocking socket support
+   - non-blocking socket support,
    - timeout after 1 minute of inactivity.
 * auth_user() redesigned to force 1 minute timeout.
 * Some source arrangement towards 4.x architecture.

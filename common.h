@@ -52,6 +52,40 @@
 /* For FormatGuard */
 #define __NO_FORMATGUARD_
 
+#ifndef USE_WIN32
+
+/* POSIX threads */
+#if HAVE_PTHREAD_H && HAVE_LIBPTHREAD
+#define USE_PTHREAD
+#define THREADS
+#define _REENTRANT
+#define _THREAD_SAFE
+#else
+#define USE_FORK
+#endif
+
+/* TCP wrapper */
+#if HAVE_TCPD_H && HAVE_LIBWRAP
+#define USE_LIBWRAP
+#endif
+
+#endif /* USE_WIN32 */
+
+#ifdef USE_PTHREAD
+#define STUNNEL_TMP "stunnel " VERSION " on " HOST " PTHREAD"
+#endif
+#ifdef USE_WIN32
+#define STUNNEL_TMP "stunnel " VERSION " on " HOST " WIN32"
+#endif
+#ifdef USE_FORK
+#define STUNNEL_TMP "stunnel " VERSION " on " HOST " FORK"
+#endif
+#ifdef USE_LIBWRAP
+#define STUNNEL_INFO STUNNEL_TMP "+LIBWRAP"
+#else
+#define STUNNEL_INFO STUNNEL_TMP
+#endif
+
 /* Must be included before sys/stat.h for Ultrix */
 #include <sys/types.h>   /* u_short, u_long */
 
@@ -142,21 +176,6 @@ typedef unsigned long long u64;
 #define closesocket(s)          close(s)
 #define ioctlsocket(a,b,c)      ioctl((a),(b),(c))
 
-/* POSIX threads */
-#if HAVE_PTHREAD_H && HAVE_LIBPTHREAD
-#define USE_PTHREAD
-#define THREADS
-#define _REENTRANT
-#define _THREAD_SAFE
-#else
-#define USE_FORK
-#endif
-
-/* TCP wrapper */
-#if HAVE_TCPD_H && HAVE_LIBWRAP
-#define USE_LIBWRAP
-#endif
-
     /* Unix-specific headers */
 #include <syslog.h>
 #include <signal.h>      /* signal */
@@ -172,6 +191,9 @@ typedef unsigned long long u64;
 #endif
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>  /* for aix */
+#endif
+#ifdef HAVE_SYS_FILIO_H
+#include <sys/filio.h>   /* for FIONBIO */
 #endif
 #include <pwd.h>
 #include <grp.h>
@@ -201,21 +223,6 @@ extern char *sys_errlist[];
 #define strerror(num) ((num)==0 ? "No error" : \
     ((num)>=sys_nerr ? "Unknown error" : sys_errlist[num]))
 #endif /* SunOS 4 */
-
-#ifdef USE_PTHREAD
-#define STUNNEL_TMP "stunnel " VERSION " on " HOST " PTHREAD"
-#endif
-#ifdef USE_WIN32
-#define STUNNEL_TMP "stunnel " VERSION " on " HOST " WIN32"
-#endif
-#ifdef USE_FORK
-#define STUNNEL_TMP "stunnel " VERSION " on " HOST " FORK"
-#endif
-#ifdef USE_LIBWRAP
-#define STUNNEL_INFO STUNNEL_TMP "+LIBWRAP"
-#else
-#define STUNNEL_INFO STUNNEL_TMP
-#endif
 
 /* Length of strings (including the terminating '\0' character) */
 #define STRLEN       1024

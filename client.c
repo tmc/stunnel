@@ -565,7 +565,6 @@ static int auth_user(CLI *c) {
     int fd;                   /* IDENT socket descriptor */
     char name[STRLEN];
     int retval;
-    unsigned long l;
 
     if(!options.username)
         return 0; /* -u option not specified */
@@ -573,9 +572,13 @@ static int auth_user(CLI *c) {
         sockerror("socket (auth_user)");
         return -1;
     }
-    l=1; /* ON */
-    if(ioctlsocket(fd, FIONBIO, &l)<0)
-        sockerror("ioctlsocket(FIONBIO)"); /* non-critical */
+#if defined FIONBIO && defined USE_NBIO
+    {
+        unsigned long l=1; /* ON */
+        if(ioctlsocket(fd, FIONBIO, &l)<0)
+            sockerror("ioctlsocket(FIONBIO)"); /* non-critical */
+    }
+#endif
     memcpy(&ident, &c->addr, sizeof(ident));
     s_ent=getservbyname("auth", "tcp");
     if(!s_ent) {
@@ -645,12 +648,6 @@ static int connect_local(CLI *c) { /* spawn local process */
         if(make_sockets(fd))
             return -1;
     }
-#ifdef USE_FORK
-    /* Each child has to take care of its own dead children */
-    signal(SIGCHLD, local_handler);
-#endif /* defined USE_FORK */
-    /* With USE_PTHREAD main thread does the work */
-    /* and SIGCHLD is blocked in other theads */
     switch(c->pid=(unsigned long)fork()) {
     case -1:    /* error */
         closesocket(fd[0]);
@@ -697,6 +694,8 @@ static void wait_local(CLI *c) {
 #ifdef HAVE_WAITPID
     switch(waitpid(c->pid, &status, WNOHANG)) {
     case -1: /* Error */
+        if(get_last_socket_error()==ECHILD)
+            return; /* No zombie created */
         ioerror("waitpid#1");
         return;
     case 0: /* Child is still alive */
