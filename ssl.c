@@ -21,12 +21,9 @@
 /* Uncomment the next line to disable RSA support */
 /* #define NO_RSA */
 
-/* Experimental DH support is disabled by default */
-/* Comment out the next line if you need it */
+/* DH support is disabled by default */
+/* It needs DH parameters in .pem file */
 #define NO_DH
-
-/* Non-blocking sockets are disabled by default */
-/* #define USE_NBIO */
 
 #ifndef NO_RSA
 
@@ -39,7 +36,7 @@
 #endif /* NO_RSA */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/lhash.h>
@@ -55,9 +52,10 @@
 extern server_options options;
 
     /* SSL functions */
-static void prng_init();
-static int  prng_seeded(int);
-static int  add_rand_file(char *);
+static int init_dh();
+static int init_prng();
+static int prng_seeded(int);
+static int add_rand_file(char *);
 #ifndef NO_RSA
 static RSA *tmp_rsa_cb(SSL *, int, int);
 static RSA *make_temp_key(int);
@@ -70,12 +68,9 @@ static void print_stats();
 SSL_CTX *ctx; /* global SSL context */
 
 void context_init() { /* init SSL */
-#ifndef NO_DH
-    static DH *dh=NULL;
-    BIO *bio=NULL;
-#endif /* NO_DH */
 
-    prng_init();
+    if(!init_prng())
+        log(LOG_INFO, "PRNG seeded successfully");
     SSLeay_add_ssl_algorithms();
     SSL_load_error_strings();
     if(options.option&OPT_CLIENT) {
@@ -85,33 +80,8 @@ void context_init() { /* init SSL */
 #ifndef NO_RSA
         SSL_CTX_set_tmp_rsa_callback(ctx, tmp_rsa_cb);
 #endif /* NO_RSA */
-#ifndef NO_DH
-        if(!(bio=BIO_new_file(options.pem, "r"))) {
-            log(LOG_ERR, "DH: Could not read %s: %s", options.pem,
-                strerror(get_last_error()));
-            goto dh_failed;
-        }
-        if(!(dh=PEM_read_bio_DHparams(bio, NULL, NULL
-#if SSLEAY_VERSION_NUMBER >= 0x00904000L
-                , NULL
-#endif
-                ))) {
-            log(LOG_ERR, "Could not load DH parameters from %s",
-                options.pem);
-            goto dh_failed;
-        }
-        SSL_CTX_set_tmp_dh(ctx, dh);
-        log(LOG_DEBUG, "Diffie-Hellman initialized with %d bit key",
-            8*DH_size(dh));
-        goto dh_done;
-dh_failed:
-        log(LOG_WARNING, "Diffie-Hellman initialization failed");
-dh_done:
-        if(bio)
-            BIO_free(bio);
-        if(dh)
-            DH_free(dh);
-#endif /* NO_DH */
+        if(init_dh())
+            log(LOG_WARNING, "Diffie-Hellman initialization failed");
     }
 
 #if SSLEAY_VERSION_NUMBER >= 0x00906000L
@@ -164,7 +134,7 @@ void context_free() { /* free SSL */
     SSL_CTX_free(ctx);
 }
 
-static void prng_init( void ) {
+static int init_prng() {
     int totbytes=0;
     char filename[STRLEN];
     int bytes;
@@ -177,9 +147,8 @@ static void prng_init( void ) {
     if(options.rand_file) {
         totbytes+=add_rand_file(options.rand_file);
         if(prng_seeded(totbytes))
-            goto SEEDED;
+            return 0;
     }
-    /* Yes.  goto.  Deal with it. */
 
     /* try the $RANDFILE or $HOME/.rnd files */
     RAND_file_name(filename, STRLEN);
@@ -187,23 +156,22 @@ static void prng_init( void ) {
         filename[STRLEN-1]='\0';        /* just in case */
         totbytes+=add_rand_file(filename);
         if(prng_seeded(totbytes))
-            goto SEEDED;
+            return 0;
     }
 
 #ifdef RANDOM_FILE
     totbytes += add_rand_file( RANDOM_FILE );
     if(prng_seeded(totbytes))
-        goto SEEDED;
+        return 0;
 #endif
 
 #ifdef USE_WIN32
     RAND_screen();
     if(prng_seeded(totbytes)) {
         log(LOG_DEBUG, "Seeded PRNG with RAND_screen");
-        goto SEEDED;
-    } else {
-        log(LOG_DEBUG, "RAND_screen failed to sufficiently seed PRNG");
+        return 0;
     }
+    log(LOG_DEBUG, "RAND_screen failed to sufficiently seed PRNG");
 #else
 
 #if SSLEAY_VERSION_NUMBER >= 0x0090581fL
@@ -215,8 +183,8 @@ static void prng_init( void ) {
             totbytes += bytes;
             log(LOG_DEBUG, "Snagged %d random bytes from EGD Socket %s",
                 bytes, options.egd_sock);
-            goto SEEDED;  /* openssl always gets what it needs or fails,
-                             so no need to check if seeded sufficiently */
+            return 0; /* OpenSSL always gets what it needs or fails,
+                         so no need to check if seeded sufficiently */
         }
     }
 #ifdef EGD_SOCKET
@@ -226,7 +194,7 @@ static void prng_init( void ) {
         totbytes += bytes;
         log(LOG_DEBUG, "Snagged %d random bytes from EGD Socket %s",
                 bytes, EGD_SOCKET);
-        goto SEEDED; /* ditto */
+        return 0;
     }
 #endif /* EGD_SOCKET */
 
@@ -236,16 +204,44 @@ static void prng_init( void ) {
     /* Try the good-old default /dev/urandom, if available  */
     totbytes+=add_rand_file( "/dev/urandom" );
     if(prng_seeded(totbytes))
-        goto SEEDED;
+        return 0;
 
     /* Random file specified during configure */
 
     log(LOG_INFO, "PRNG seeded with %d bytes total", totbytes);
     log(LOG_WARNING, "PRNG may not have been seeded with enough random bytes");
-    return;
-SEEDED:
-    log(LOG_INFO, "PRNG seeded successfully");
-    return;
+    return -1; /* FAILED */
+}
+
+static int init_dh() {
+#ifndef NO_DH
+    DH *dh;
+    BIO *bio;
+
+    if(!(bio=BIO_new_file(options.pem, "r"))) {
+        log(LOG_ERR, "BIO_new_file: Could not read %s: %s",
+            options.pem, strerror(get_last_error()));
+        return -1; /* FAILED */
+    }
+    if((dh=PEM_read_bio_DHparams(bio, NULL, NULL
+#if SSLEAY_VERSION_NUMBER >= 0x00904000L
+            , NULL
+#endif
+            ))) {
+        BIO_free(bio);
+        log(LOG_DEBUG, "Using Diffie-Hellman parameters from %s",
+            options.pem);
+    } else { /* Failed to load DH parameters from file */
+        BIO_free(bio);
+        log(LOG_NOTICE, "Could not load DH parameters from %s", options.pem);
+        return -1; /* FAILED */
+    }
+    SSL_CTX_set_tmp_dh(ctx, dh);
+    log(LOG_INFO, "Diffie-Hellman initialized with %d bit key",
+        8*DH_size(dh));
+    DH_free(dh);
+#endif /* NO_DH */
+    return 0; /* OK */
 }
 
 /* shortcut to determine if sufficient entropy for PRNG is present */

@@ -4,7 +4,7 @@
  *                 All Rights Reserved
  *
  *   Version:      3.21                  (stunnel.c)
- *   Date:         2001.08.xx
+ *   Date:         2001.09.xx
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -24,7 +24,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 #ifdef USE_WIN32
 static struct WSAData wsa_state;
@@ -48,7 +48,6 @@ void sockerror(char *);
 static void sigchld_handler(int);
 #endif
 #ifndef USE_WIN32
-static void local_handler(int);
 static void signal_handler(int);
 #endif
 
@@ -129,11 +128,11 @@ static void daemon_loop() {
     options.clients=0;
 #ifndef USE_WIN32
 #ifdef USE_FORK
-    /* Main process will receive signals about dead children */
+    /* Handle signals about dead children */
     signal(SIGCHLD, sigchld_handler);
 #else /* defined USE_FORK */
-    /* Main process will receive signals about dead children of it's threads */
-    signal(SIGCHLD, local_handler);
+    /* Ignore signals about dead children of clients' threads */
+    signal(SIGCHLD, SIG_IGN);
 #endif /* defined USE_FORK */
 #endif /* ndefined USE_WIN32 */
     while(1) {
@@ -146,6 +145,9 @@ static void daemon_loop() {
             sleep(10);
             continue;
         }
+#ifdef FD_CLOEXEC
+        fcntl(s, F_SETFD, FD_CLOEXEC); /* close socket in child execvp */
+#endif
         if(options.clients<MAX_CLIENTS) {
             if(create_client(ls, s, client)) {
                 enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
@@ -396,7 +398,7 @@ void sockerror(char *txt) { /* Socket error handler */
 static void sigchld_handler(int sig) { /* Dead children detected */
     int pid, status;
 
-#if defined(HAVE_WAITPID)
+#ifdef HAVE_WAITPID
     while((pid=waitpid(-1, &status, WNOHANG))>0) {
         options.clients--; /* One client less */
         if(WIFSIGNALED(status)) {
@@ -418,27 +420,6 @@ static void sigchld_handler(int sig) { /* Dead children detected */
 #endif
 
 #ifndef USE_WIN32
-
-static void local_handler(int sig) { /* sigchld handler for -l processes */
-    int pid, status;
-
-#if defined(HAVE_WAITPID)
-    while((pid=waitpid(-1, &status, WNOHANG))>0) {
-        if(WIFSIGNALED(status)) {
-            log(LOG_DEBUG, "Local process %s[%d] terminated on signal %d)",
-                options.servname, pid, WTERMSIG(status));
-        } else {
-            log(LOG_DEBUG, "Local process %s[%d] finished with code %d)",
-                options.servname, pid, WEXITSTATUS(status));
-        }
-    }
-#else
-    pid=wait(&status);
-    log(LOG_DEBUG, "Local process %s[%d] finished with code %d",
-        options.servname, pid, status);
-#endif
-    signal(SIGCHLD, local_handler);
-}
 
 static void signal_handler(int sig) { /* Signal handler */
     log(LOG_ERR, "Received signal %d; terminating", sig);

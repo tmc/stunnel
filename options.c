@@ -19,7 +19,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 /* Needed so we know which version of OpenSSL we're using */
 #ifdef HAVE_OPENSSL

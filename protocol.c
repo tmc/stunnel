@@ -19,7 +19,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 /* protocol-specific function prototypes */
 static int smb_client(int, int, int);

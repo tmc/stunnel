@@ -23,9 +23,32 @@
 
 #include "common.h"
 
+#ifdef HAVE_OPENSSL
+#include <openssl/lhash.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#else
+#include <lhash.h>
+#include <ssl.h>
+#include <err.h>
+#endif
+
 typedef struct {
-    int local_rd, local_wr; /* Read and write side of local file descriptor */
+    int error; /* Reset connections */
+    struct sockaddr_in addr; /* Local address */
+    int local_rfd, local_wfd; /* Read and write local descriptors */
+    int remote_fd; /* Remote descriptor */
     int negotiation_level; /* fdscanf() or fdprintf() number in negotiate() */
+    SSL *ssl; /* SSL Connection */
+    int ip; /* for connect_local() and connect_remote() */
+    unsigned long pid; /* PID of local process */
+    char sock_buff[BUFFSIZE]; /* Socket read buffer */
+    char ssl_buff[BUFFSIZE]; /* SSL read buffer */
+    int sock_ptr, ssl_ptr; /* Index of first unused byte in buffer */
+    int sock_rfd, sock_wfd; /* Read and write socket descriptors */
+    int ssl_rfd, ssl_wfd; /* Read and write SSL descriptors */
+    int sock_bytes, ssl_bytes; /* Bytes written to socket and ssl */
 } CLI;
 
 typedef enum {
@@ -43,10 +66,20 @@ typedef enum {
 
 typedef struct {
     STATE state;
-    int rd; /* Waiting for read */
-    int wr; /* Waiting for write */
+    int rd; /* Open for read */
+    int wr; /* Open for write */
+    int is_socket; /* File descriptor is a socket */
     CLI *cli; /* Client structure if state>STATE_ACCEPT */
 } FD;
+
+#define MAX_FD 1024
+
+extern FD d[MAX_FD];
+
+#define sock_rd (d[c->sock_rfd].rd)
+#define sock_wr (d[c->sock_wfd].wr)
+#define ssl_rd (d[c->ssl_rfd].rd)
+#define ssl_wr (d[c->ssl_wfd].wr)
 
 #endif /* defined CLIENT_H */
 

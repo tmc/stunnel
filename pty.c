@@ -21,7 +21,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 #ifdef HAVE_UTIL_H
 #include <util.h>

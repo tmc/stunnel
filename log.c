@@ -19,7 +19,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 extern server_options options;
 

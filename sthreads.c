@@ -19,7 +19,7 @@
  */
 
 #include "common.h"
-#include "proto.h"
+#include "prototypes.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/crypto.h> /* for CRYPTO_* */
@@ -123,11 +123,11 @@ void sthreads_init() {
 }
 
 unsigned long process_id() {
-    return GetCurrentProcessId();
+    return GetCurrentProcessId() & 0x00ffffff;
 }
 
 unsigned long thread_id() {
-    return GetCurrentThreadId();
+    return GetCurrentThreadId() & 0x00ffffff;
 }
 
 int create_client(int ls, int s, void *(*cli)(void *)) {

@@ -18,8 +18,8 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef PROTO_H
-#define PROTO_H
+#ifndef PROTOTYPES_H
+#define PROTOTYPES_H
 
 #include "common.h"
 
@@ -136,6 +136,6 @@ typedef struct {
 
 void parse_options(int argc, char *argv[]);
 
-#endif /* defined PROTO_H */
+#endif /* defined PROTOTYPES_H */
 
-/* End of proto.h */
+/* End of prototypes.h */
