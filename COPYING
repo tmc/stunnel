@@ -8,3 +8,6 @@ Distribution methods:
      Precompiled Windows binary is distributed under SSLeay license.
      See COPYRIGHT.SSLeay file.
 
+     Specific permission is granted for this code to be linked to OpenSSL
+     (this is necessary becuse the OpenSSL license is not GPL-compatible).
+

@@ -899,7 +899,7 @@ else
 fi
 
 
-VERSION="3.21pre3"
+VERSION="3.21pre4"
 
 cat >> confdefs.h <<EOF
 #define VERSION "$VERSION"
@@ -1635,7 +1635,7 @@ done
 # AC_TYPE_PID_T
 # AC_HEADER_TIME
 
-for ac_func in getopt snprintf vsnprintf openpty _getpty daemon waitpid
+for ac_func in getopt snprintf vsnprintf openpty _getpty daemon waitpid wait4
 do
 echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
 echo "configure:1642: checking for $ac_func" >&5

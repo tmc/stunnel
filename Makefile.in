@@ -50,8 +50,9 @@ mostlyclean: distclean
 
 maintainer-clean: distclean
 
-dist: distclean ../dist/$(VERSION).exe
+dist: ../dist/$(VERSION).exe
 	cp -rp . ../dist/$(VERSION)
+	$(MAKE) -C ../dist/$(VERSION) distclean
 	tar -cf - -C ../dist $(VERSION) | gzip > ../dist/$(VERSION).tar.gz
 	rm -rf ../dist/$(VERSION)
 	gpg --yes --armor --detach-sign --force-v3-sigs ../dist/$(VERSION).tar.gz

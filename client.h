@@ -23,6 +23,9 @@
 
 #include "common.h"
 
+/* I/O buffer size */
+#define BUFFSIZE 16384
+
 #ifdef HAVE_OPENSSL
 #include <openssl/lhash.h>
 #include <openssl/ssl.h>
@@ -49,6 +52,7 @@ typedef struct {
     int sock_rfd, sock_wfd; /* Read and write socket descriptors */
     int ssl_rfd, ssl_wfd; /* Read and write SSL descriptors */
     int sock_bytes, ssl_bytes; /* Bytes written to socket and ssl */
+    int cleanup_remote_needed, cleanup_ssl_needed; /* Need to clean up */
 } CLI;
 
 typedef enum {
@@ -80,6 +84,9 @@ extern FD d[MAX_FD];
 #define sock_wr (d[c->sock_wfd].wr)
 #define ssl_rd (d[c->ssl_rfd].rd)
 #define ssl_wr (d[c->ssl_wfd].wr)
+
+/* Prototype for protocol.c */
+int negotiate(char *, int, CLI *c);
 
 #endif /* defined CLIENT_H */
 

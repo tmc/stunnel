@@ -1,6 +1,10 @@
 stunnel         Universal SSL tunnel
 
 Version 3.21, 2001.09.xx, urgency: LOW:
+* SSL_CLIENT_DN and SSL_CLIENT_I_DN environment variables set in local mode
+  (-l) process.  This feature doesn't work if
+  client mode (-c) or protocol negotiation (-n) is used.
+* Stunnel always requests peer certificate.  It's just ignored by default.
 * Problem with errno and posix threads fixed.
 * Catching zombies rewritten.
 * SSL mode changed for OpenSSL >= 0.9.6.

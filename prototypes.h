@@ -41,10 +41,6 @@ void *client(void *);
 int fdprintf(int, char *, ...);
 int fdscanf(int, char *, char *);
 
-/* Prototypes for protocol.c */
-
-int negotiate(char *, int, int, int, int);
-
 /* Prototypes for log.c */
 
 void log_open();

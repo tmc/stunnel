@@ -347,8 +347,11 @@ static RSA *make_temp_key(int keylen) {
 #endif /* NO_RSA */
 
 static void verify_init() {
-    if(options.verify_level==SSL_VERIFY_NONE)
-        return; /* No need to setup certificate verify */
+    if(options.verify_level==SSL_VERIFY_NONE) {
+        /* Request a certificate, but ignore it */
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
+        return;
+    }
     log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
     log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
     log(LOG_DEBUG, "cert_file is %s", options.cert_file);
@@ -409,7 +412,7 @@ static void verify_info() {
 }
 #endif
 
-static int verify_callback(int state, X509_STORE_CTX *ctx) {
+static int verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
         /* our verify callback function */
     char txt[STRLEN];
     X509_OBJECT ret;
@@ -417,7 +420,12 @@ static int verify_callback(int state, X509_STORE_CTX *ctx) {
     X509_NAME_oneline(X509_get_subject_name(ctx->current_cert),
         txt, STRLEN);
     safestring(txt);
-    if(!state) {
+    if(options.verify_level==SSL_VERIFY_NONE) {
+        if(preverify_ok)
+            log(LOG_NOTICE, "Certificate ignored: %s", txt);
+        return 1; /* Accept connection */
+    }
+    if(!preverify_ok) {
         /* Remote site specified a certificate, but it's not correct */
         log(LOG_WARNING, "VERIFY ERROR: depth=%d error=%s: %s",
             ctx->error_depth,

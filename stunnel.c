@@ -398,9 +398,15 @@ void sockerror(char *txt) { /* Socket error handler */
 static void sigchld_handler(int sig) { /* Dead children detected */
     int pid, status;
 
-#ifdef HAVE_WAITPID
-    while((pid=waitpid(-1, &status, WNOHANG))>0) {
+#ifdef HAVE_WAIT_FOR_PID
+    while((pid=wait_for_pid(-1, &status, WNOHANG))>0) {
         options.clients--; /* One client less */
+#else
+    pid=wait(&status);
+    options.clients--; /* One client less */
+    {
+#endif
+#ifdef WIFSIGNALED
         if(WIFSIGNALED(status)) {
             log(LOG_DEBUG, "%s[%d] terminated on signal %d (%d left)",
                 options.servname, pid, WTERMSIG(status), options.clients);
@@ -410,10 +416,9 @@ static void sigchld_handler(int sig) { /* Dead children detected */
         }
     }
 #else
-    pid=wait(&status);
-    options.clients--; /* One client less */
-    log(LOG_DEBUG, "%s[%d] finished with code %d (%d left)",
-        options.servname, pid, status, options.clients);
+        log(LOG_DEBUG, "%s[%d] finished with code %d (%d left)",
+            options.servname, pid, status, options.clients);
+    }
 #endif
     signal(SIGCHLD, sigchld_handler);
 }

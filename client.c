@@ -21,9 +21,6 @@
 /* Non-blocking sockets are disabled by default */
 /* #define USE_NBIO */
 
-/* I/O buffer size */
-#define BUFFSIZE 16384
-
 /* Undefine if you have problems with make_sockets() */
 #define INET_SOCKET_PAIR
 
@@ -56,7 +53,7 @@ static unsigned char *sid_ctx=(unsigned char *)"stunnel SID";
 extern SSL_CTX *ctx; /* global SSL context defined in ssl.c */
 extern server_options options;
 
-    /* SSL functions */
+static void init_client(CLI *);
 static void init_local(CLI *);
 static void init_remote(CLI *);
 static void init_ssl(CLI *);
@@ -95,22 +92,21 @@ void *client(void *local) {
     } else
         c->local_rfd=c->local_wfd=(int)local;
     c->error=0;
-    init_local(c);
+    c->cleanup_remote_needed=0;
+    c->cleanup_ssl_needed=0;
+    init_client(c);
     if(!c->error) {
-        init_remote(c);
-        if(!c->error) {
-            init_ssl(c);
-            if(!c->error)
-                nbio(c, 1);
-                transfer(c);
-                nbio(c, 0);
-                log(LOG_NOTICE,
-                    "Connection %s: %d bytes sent to SSL, %d bytes sent to socket",
-                     c->error ? "reset" : "closed", c->ssl_bytes, c->sock_bytes);
-                cleanup_ssl(c);
-        }
-        cleanup_remote(c);
+        nbio(c, 1);
+        transfer(c);
+        nbio(c, 0);
+        log(LOG_NOTICE,
+            "Connection %s: %d bytes sent to SSL, %d bytes sent to socket",
+             c->error ? "reset" : "closed", c->ssl_bytes, c->sock_bytes);
     }
+    if(c->cleanup_ssl_needed)
+        cleanup_ssl(c);
+    if(c->cleanup_remote_needed)
+        cleanup_remote(c);
     cleanup_local(c);
 #ifndef USE_WIN32
     if(!(options.option&OPT_REMOTE))
@@ -124,6 +120,45 @@ void *client(void *local) {
     leave_critical_section(CRIT_CLIENTS);
 #endif
     return NULL;
+}
+
+static void init_client(CLI *c) {
+    init_local(c);
+    if(c->error)
+        return;
+    if(!(options.option&OPT_REMOTE) && !(options.option&OPT_CLIENT)
+            && !options.protocol) {
+        /* Local process will to be spawned on the plain socket */
+        /* No protocol negotiation needed */
+        init_ssl(c);
+        if(c->error)
+            return;
+        init_remote(c);
+        if(c->error)
+            return;
+    } else {
+        init_remote(c);
+        if(c->error)
+            return;
+        if(negotiate(options.protocol, options.option&OPT_CLIENT, c) <0) {
+            log(LOG_ERR, "Protocol negotiations failed");
+            c->error=1;
+            return;
+        }
+        init_ssl(c);
+        if(c->error)
+            return;
+    }
+    /* Setup some values for transfer() function */
+    if(options.option&OPT_CLIENT) {
+        c->sock_rfd=c->local_rfd;
+        c->sock_wfd=c->local_wfd;
+        c->ssl_rfd=c->ssl_wfd=c->remote_fd;
+    } else {
+        c->sock_rfd=c->sock_wfd=c->remote_fd;
+        c->ssl_rfd=c->local_rfd;
+        c->ssl_wfd=c->local_wfd;
+    }
 }
 
 static void init_local(CLI *c) {
@@ -166,7 +201,9 @@ static void init_local(CLI *c) {
             inet_ntoa(c->addr.sin_addr), ntohs(c->addr.sin_port));
         leave_critical_section(CRIT_NTOA);
     }
+}
 
+static void init_remote(CLI *c) {
     /* create connection to host/service */
     if(options.local_ip)
         c->ip=*options.local_ip;
@@ -190,35 +227,24 @@ static void init_local(CLI *c) {
         d[c->remote_fd].is_socket=1;
         log(LOG_DEBUG, "Local service connected");
     }
-}
-
-static void init_remote(CLI *c) {
+    c->cleanup_remote_needed=1;
     if(set_socket_options(c->remote_fd, 2)<0) {
         c->error=1;
         return;
     }
+}
 
-    /* negotiate protocol */
-    if(negotiate(options.protocol, options.option&OPT_CLIENT,
-            c->local_rfd, c->local_wfd, c->remote_fd) <0) {
-        log(LOG_ERR, "Protocol negotiations failed");
-        c->error=1;
-        return;
-    }
-
-    /* do the job */
+static void init_ssl(CLI *c) {
     if(!(c->ssl=SSL_new(ctx))) {
         sslerror("SSL_new");
         c->error=1;
         return;
     }
+    c->cleanup_ssl_needed=1;
 #if SSLEAY_VERSION_NUMBER >= 0x0922
     SSL_set_session_id_context(c->ssl, sid_ctx, strlen(sid_ctx));
 #endif
     if(options.option&OPT_CLIENT) {
-        c->sock_rfd=c->local_rfd;
-        c->sock_wfd=c->local_wfd;
-        c->ssl_rfd=c->ssl_wfd=c->remote_fd;
         /* Attempt to use the most recent id in the session cache */
         if(ctx->session_cache_head)
             if(!SSL_set_session(c->ssl, ctx->session_cache_head))
@@ -226,9 +252,6 @@ static void init_remote(CLI *c) {
         SSL_set_fd(c->ssl, c->remote_fd);
         SSL_set_connect_state(c->ssl);
     } else {
-        c->sock_rfd=c->sock_wfd=c->remote_fd;
-        c->ssl_rfd=c->local_rfd;
-        c->ssl_wfd=c->local_wfd;
         if(c->local_rfd==c->local_wfd)
             SSL_set_fd(c->ssl, c->local_rfd);
         else {
@@ -238,9 +261,6 @@ static void init_remote(CLI *c) {
         }
         SSL_set_accept_state(c->ssl);
     }
-}
-
-static void init_ssl(CLI *c) {
     if(options.option&OPT_CLIENT) {
         if(SSL_connect(c->ssl)<=0) {
             sslerror("SSL_connect");
@@ -634,8 +654,9 @@ static int connect_local(CLI *c) { /* spawn local process */
     return -1;
 #else
     struct in_addr addr;
-    char text[STRLEN];
+    char env[3][STRLEN], name[STRLEN];
     int fd[2];
+    X509 *peer;
 
     if (options.option & OPT_PTY) {
         char tty[STRLEN];
@@ -666,11 +687,27 @@ static int connect_local(CLI *c) { /* spawn local process */
             /* For Tru64 _RLD_LIST is used instead */
             putenv("_RLD_LIST=" libdir "/stunnel.so:DEFAULT");
             addr.s_addr = c->ip;
-            safecopy(text, "REMOTE_HOST=");
+            safecopy(env[0], "REMOTE_HOST=");
             enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
-            safeconcat(text, inet_ntoa(addr));
+            safeconcat(env[0], inet_ntoa(addr));
             leave_critical_section(CRIT_NTOA);
-            putenv(text);
+            putenv(env[0]);
+        }
+        if(c->ssl) {
+            peer=SSL_get_peer_certificate(c->ssl);
+            if(peer) {
+                safecopy(env[1], "SSL_CLIENT_DN=");
+                X509_NAME_oneline(X509_get_subject_name(peer), name, STRLEN);
+                safestring(name);
+                safeconcat(env[1], name);
+                putenv(env[1]);
+                safecopy(env[2], "SSL_CLIENT_I_DN=");
+                X509_NAME_oneline(X509_get_issuer_name(peer), name, STRLEN);
+                safestring(name);
+                safeconcat(env[2], name);
+                putenv(env[2]);
+                X509_free(peer);
+            }
         }
         execvp(options.execname, options.execargs);
         ioerror(options.execname); /* execv failed */
@@ -691,12 +728,12 @@ static int connect_local(CLI *c) { /* spawn local process */
 static void wait_local(CLI *c) {
     int status;
 
-#ifdef HAVE_WAITPID
-    switch(waitpid(c->pid, &status, WNOHANG)) {
+#ifdef HAVE_WAIT_FOR_PID
+    switch(wait_for_pid(c->pid, &status, WNOHANG)) {
     case -1: /* Error */
         if(get_last_socket_error()==ECHILD)
             return; /* No zombie created */
-        ioerror("waitpid#1");
+        ioerror("wait_for_pid#1");
         return;
     case 0: /* Child is still alive */
         log(LOG_DEBUG, "Killing local mode child (PID=%lu)", c->pid);
@@ -704,14 +741,16 @@ static void wait_local(CLI *c) {
             ioerror("kill");
             return;
         }
-        if(waitpid(c->pid, &status, 0)<0) {
-            ioerror("waitpid#2");
+        if(wait_for_pid(c->pid, &status, 0)<0) {
+            if(get_last_socket_error()==ECHILD)
+                return; /* No zombie created */
+            ioerror("wait_for_pid#2");
             return;
         }
     default: /* Child is dead */
         break;
     }
-#else /* HAVE WAITPID */
+#else /* HAVE WAIT_FOR_PID */
     log(LOG_DEBUG, "Killing local mode child (PID=%lu)", c->pid);
     if(kill(c->pid, 9)<0) {
         ioerror("kill");
@@ -721,7 +760,7 @@ static void wait_local(CLI *c) {
         ioerror("wait");
         return;
     }
-#endif /* HAVE_WAITPID */
+#endif /* HAVE_WAIT_FOR_PID */
 #ifdef WIFSIGNALED
     if(WIFSIGNALED(status)) {
         log(LOG_DEBUG, "Local process %s (PID=%lu) terminated on signal %d",

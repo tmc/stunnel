@@ -214,7 +214,15 @@ typedef unsigned long long u64;
 #define INADDR_LOOPBACK  (u32)0x7F000001
 #endif
 
-#endif /* USE_WIN32 */
+#if defined(HAVE_WAITPID)
+/* For SYSV systems */
+#define wait_for_pid(a, b, c) waitpid((a), (b), (c))
+#define HAVE_WAIT_FOR_PID 1
+#elif defined(HAVE_WAIT4)
+/* For BSD systems */
+#define wait_for_pid(a, b, c) wait4((a), (b), (c), NULL)
+#define HAVE_WAIT_FOR_PID 1
+#endif
 
 #if defined(sun) && !defined(__svr4__)  /* ie. SunOS 4 */
 #define atexit(a) on_exit((a), NULL)
@@ -223,6 +231,8 @@ extern char *sys_errlist[];
 #define strerror(num) ((num)==0 ? "No error" : \
     ((num)>=sys_nerr ? "Unknown error" : sys_errlist[num]))
 #endif /* SunOS 4 */
+
+#endif /* USE_WIN32 */
 
 /* Length of strings (including the terminating '\0' character) */
 #define STRLEN       1024
