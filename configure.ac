@@ -1,6 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT(stunnel.c)
+AC_INIT
+AC_CONFIG_SRCDIR([stunnel.c])
 
 AC_CANONICAL_HOST
 AC_PROG_CC
@@ -8,7 +9,7 @@ if test "$GCC" = "yes"; then CFLAGS="$CFLAGS -Wall"; fi
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
-VERSION="3.21b"
+VERSION="3.21c"
 AC_SUBST(VERSION)
 AC_DEFINE_UNQUOTED(VERSION, "$VERSION")
 
@@ -205,7 +206,7 @@ AC_CHECK_HEADERS(getopt.h unistd.h sys/select.h tcpd.h pthread.h sys/ioctl.h uti
 # AC_HEADER_TIME
 
 dnl Checks for library functions.
-AC_CHECK_FUNCS(getopt snprintf vsnprintf openpty _getpty daemon waitpid wait4 sysconf getrlimit)
+AC_CHECK_FUNCS(getopt snprintf vsnprintf openpty _getpty daemon waitpid wait4 sysconf getrlimit pthread_sigmask)
 
 dnl Checks for integer sizes
 AC_CHECK_SIZEOF(unsigned char)
@@ -216,6 +217,7 @@ AC_CHECK_SIZEOF(unsigned long long)
 
 LIBS="$LIBS $wrap_LIB"
 
-AC_OUTPUT(Makefile)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
 
 # End of configure.in

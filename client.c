@@ -350,13 +350,18 @@ static void transfer(CLI *c) { /* transfer data */
         check_SSL_pending = 0;
 
         if(sock_wr && FD_ISSET(c->sock_wfd, &wr_set)) {
-            num=writesocket(c->sock_wfd, c->ssl_buff, c->ssl_ptr);
-            if(num<0) {
+            switch(num=writesocket(c->sock_wfd, c->ssl_buff, c->ssl_ptr)) {
+            case -1: /* error */
+                if(get_last_socket_error()==EINTR) {
+                    log(LOG_DEBUG, "Socket write interrupted by a signal - retrying");
+                    break;
+                }
                 sockerror("write");
                 c->error=1;
                 return;
-            }
-            if(num) {
+            case 0:
+                return;
+            default:
                 memcpy(c->ssl_buff, c->ssl_buff+num, c->ssl_ptr-num);
                 if(c->ssl_ptr==BUFFSIZE)
                     check_SSL_pending=1;
@@ -395,10 +400,14 @@ static void transfer(CLI *c) { /* transfer data */
             case SSL_ERROR_WANT_WRITE:
             case SSL_ERROR_WANT_READ:
             case SSL_ERROR_WANT_X509_LOOKUP:
-                log(LOG_DEBUG, "SSL_write returned WANT_ - retry");
+                log(LOG_DEBUG, "SSL_write returned WANT_ - retrying");
                 break;
             case SSL_ERROR_SYSCALL:
                 if(num<0) { /* not EOF */
+                    if(get_last_socket_error()==EINTR) {
+                        log(LOG_DEBUG, "SSL write interrupted by a signal - retrying");
+                        break;
+                    }
                     sockerror("SSL_write (ERROR_SYSCALL)");
                     c->error=1;
                     return;
@@ -418,19 +427,23 @@ static void transfer(CLI *c) { /* transfer data */
         }
 
         if(sock_rd && FD_ISSET(c->sock_rfd, &rd_set)) {
-            num=readsocket(c->sock_rfd, c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr);
-
-            if(num<0 && get_last_socket_error()==ECONNRESET) {
-                log(LOG_NOTICE, "IPC reset (child died)");
-                break; /* close connection */
-            }
-            if (num<0 && get_last_socket_error()!=EIO) {
-                sockerror("read");
+            switch(num=readsocket(c->sock_rfd, c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr)) {
+            case -1:
+                if(get_last_socket_error()==EINTR) {
+                    log(LOG_DEBUG, "Socket read interrupted by a signal - retrying");
+                    break;
+                }
+                if(get_last_socket_error()==EIO) {
+                    log(LOG_DEBUG, "I/O error - retrying");
+                    break;
+                }
+                if(get_last_socket_error()==ECONNRESET)
+                    log(LOG_NOTICE, "IPC reset (child died)");
+                else
+                    sockerror("read");
                 c->error=1;
                 return;
-            } else if (num>0) {
-                c->sock_ptr += num;
-            } else { /* close */
+            case 0: /* close */
                 log(LOG_DEBUG, "Socket closed on read");
                 sock_rd=0;
                 if(!c->sock_ptr && ssl_wr) {
@@ -439,6 +452,9 @@ static void transfer(CLI *c) { /* transfer data */
                         "SSL write shutdown (output buffer empty)");
                     ssl_wr=0;
                 }
+                break;
+            default:
+                c->sock_ptr += num;
             }
         }
 
@@ -460,10 +476,14 @@ static void transfer(CLI *c) { /* transfer data */
             case SSL_ERROR_WANT_WRITE:
             case SSL_ERROR_WANT_READ:
             case SSL_ERROR_WANT_X509_LOOKUP:
-                log(LOG_DEBUG, "SSL_read returned WANT_ - retry");
+                log(LOG_DEBUG, "SSL_read returned WANT_ - retrying");
                 break;
             case SSL_ERROR_SYSCALL:
                 if(num<0) { /* not EOF */
+                    if(get_last_socket_error()==EINTR) {
+                        log(LOG_DEBUG, "SSL read interrupted by a signal - retrying");
+                        break;
+                    }
                     sockerror("SSL_read (SSL_ERROR_SYSCALL)");
                     c->error=1;
                     return;

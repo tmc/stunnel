@@ -287,7 +287,7 @@ void parse_options(int argc, char *argv[]) {
 }
 
 static void print_version() {
-    fprintf(stderr, "\n" STUNNEL_INFO "\n\n");
+    fprintf(stderr, "\n%s\n\n", stunnel_info());
     fprintf(stderr, "Default behaviour:\n"
 #ifdef USE_WIN32
         "\trun in daemon mode\n"
@@ -387,7 +387,7 @@ static void print_help() {
         "\n  -t timeout\tsession cache timeout"
         "\n  -u user\tuse IDENT (RFC 1413) username checking"
         "\n  -n proto\tnegotiate SSL with specified protocol"
-        "\n\t\tcurrenty supported: smtp, pop3, nntp"
+        "\n\t\tcurrently supported: smtp, pop3, nntp"
         "\n  -N name\tservice name to use for tcp wrapper checking"
 #ifndef USE_WIN32
         "\n  -s username\tsetuid() to username in daemon mode"
@@ -411,7 +411,7 @@ static void print_help() {
 #endif
         "\n  -W\t\tdo not overwrite random seed datafiles with new random data"
         "\n  -D [fac.]lev\tdebug level (e.g. daemon.info)"
-        "\n  -O a|l|r:option=value[:value]\tset an opion on accept/local/remote socket"
+        "\n  -O a|l|r:option=value[:value]\tset an option on accept/local/remote socket"
         "\n  -o file\tappend log messages to a file"
         "\n"
         "\nSee stunnel -V output for default values\n"

@@ -3,8 +3,8 @@
  *   Copyright (c) 1998-2001 Michal Trojnara <Michal.Trojnara@mirt.net>
  *                 All Rights Reserved
  *
- *   Version:      3.21b            (stunnel.c)
- *   Date:         2001.11.03
+ *   Version:      3.21c            (stunnel.c)
+ *   Date:         2001.11.11
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -35,6 +35,12 @@
 
 #include "common.h"
 #include "prototypes.h"
+
+#ifdef HAVE_OPENSSL
+#include <openssl/crypto.h> /* for SSLeay_version */
+#else
+#include <crypto.h>
+#endif
 
 #ifdef USE_WIN32
 static struct WSAData wsa_state;
@@ -129,7 +135,7 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
     /* check if started from inetd */
     context_init(); /* initialize global SSL context */
     sthreads_init(); /* initialize threads */
-    log(LOG_NOTICE, "%s", STUNNEL_INFO);
+    log(LOG_NOTICE, "%s", stunnel_info());
     if(options.option & OPT_DAEMON) { /* daemon mode */
 #ifndef USE_WIN32
         if(!(options.option & OPT_FOREGROUND))
@@ -639,5 +645,26 @@ static BOOL CtrlHandler(DWORD fdwCtrlType) {
 }
 
 #endif /* !defined USE_WIN32 */
+
+char *stunnel_info() {
+    static char retval[STRLEN];
+
+    safecopy(retval, "stunnel " VERSION " on " HOST);
+#ifdef USE_PTHREAD
+    safeconcat(retval, " PTHREAD");
+#endif
+#ifdef USE_WIN32
+    safeconcat(retval, " WIN32");
+#endif
+#ifdef USE_FORK
+    safeconcat(retval, " FORK");
+#endif
+#ifdef USE_LIBWRAP
+    safeconcat(retval, "+LIBWRAP");
+#endif
+    safeconcat(retval, " with ");
+    safeconcat(retval, SSLeay_version(SSLEAY_VERSION));
+    return retval;
+}
 
 /* End of stunnel.c */

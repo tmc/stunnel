@@ -1,5 +1,13 @@
 stunnel         Universal SSL tunnel
 
+Version 3.21c, 2001.11.11, urgency: LOW:
+* autoconf scripts upgraded to version 2.52.
+* Problem with pthread_sigmask on Darwin fixed (I hope).
+* Some documentation typos corrected.
+* Attempt to ignore EINTR in transfer().
+* Shared library version reported on startup.
+* DLLs for OpenSSL 0.9.6b.
+
 Version 3.21b, 2001.11.03, urgency: MEDIUM:
 * File descriptor leak on failed connect() fixed.
 
