@@ -16,6 +16,16 @@
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *   In addition, as a special exception, Michal Trojnara gives
+ *   permission to link the code of this program with the OpenSSL
+ *   library (or with modified versions of OpenSSL that use the same
+ *   license as OpenSSL), and distribute linked combinations including
+ *   the two.  You must obey the GNU General Public License in all
+ *   respects for all of the code used other than OpenSSL.  If you modify
+ *   this file, you may extend this exception to your version of the
+ *   file, but you are not obligated to do so.  If you do not wish to
+ *   do so, delete this exception statement from your version.
  */
 
 /* Uncomment the next line to disable RSA support */
@@ -219,8 +229,7 @@ static int init_dh() {
     BIO *bio;
 
     if(!(bio=BIO_new_file(options.pem, "r"))) {
-        log(LOG_ERR, "BIO_new_file: Could not read %s: %s",
-            options.pem, strerror(get_last_error()));
+        ioerror(options.pem);
         return -1; /* FAILED */
     }
     if((dh=PEM_read_bio_DHparams(bio, NULL, NULL
@@ -349,11 +358,6 @@ static RSA *make_temp_key(int keylen) {
 static void verify_init() {
     if(options.verify_level<0)
         return; /* No certificate verification */
-    if(options.verify_level==0) {
-        /* Request a certificate, but ignore it */
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
-        return;
-    }
     log(LOG_DEBUG, "cert_defaults is %d", options.cert_defaults);
     log(LOG_DEBUG, "cert_dir is %s", options.cert_dir);
     log(LOG_DEBUG, "cert_file is %s", options.cert_file);
@@ -395,7 +399,8 @@ static void verify_init() {
         log(LOG_DEBUG, "Set verify directory to %s", options.cert_dir);
     }
 
-    SSL_CTX_set_verify(ctx, options.verify_level, verify_callback);
+    SSL_CTX_set_verify(ctx, options.verify_level==SSL_VERIFY_NONE ?
+        SSL_VERIFY_PEER : options.verify_level, verify_callback);
 
     if (options.verify_use_only_my)
         log(LOG_NOTICE, "Peer certificate location %s", options.cert_dir);
@@ -423,13 +428,12 @@ static int verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
         txt, STRLEN);
     safestring(txt);
     if(options.verify_level==SSL_VERIFY_NONE) {
-        if(preverify_ok)
-            log(LOG_NOTICE, "Certificate ignored: %s", txt);
+        log(LOG_NOTICE, "VERIFY IGNORE: depth=%d, %s", ctx->error_depth, txt);
         return 1; /* Accept connection */
     }
     if(!preverify_ok) {
         /* Remote site specified a certificate, but it's not correct */
-        log(LOG_WARNING, "VERIFY ERROR: depth=%d error=%s: %s",
+        log(LOG_WARNING, "VERIFY ERROR: depth=%d, error=%s: %s",
             ctx->error_depth,
             X509_verify_cert_error_string (ctx->error), txt);
         return 0; /* Reject connection */
@@ -437,10 +441,10 @@ static int verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
     if(options.verify_use_only_my && ctx->error_depth==0 &&
             X509_STORE_get_by_subject(ctx, X509_LU_X509,
                 X509_get_subject_name(ctx->current_cert), &ret)!=1) {
-        log(LOG_WARNING, "VERIFY ERROR ONLY MY: no cert for: %s", txt);
+        log(LOG_WARNING, "VERIFY ERROR ONLY MY: no cert for %s", txt);
         return 0; /* Reject connection */
     }
-    log(LOG_NOTICE, "VERIFY OK: depth=%d: %s", ctx->error_depth, txt);
+    log(LOG_NOTICE, "VERIFY OK: depth=%d, %s", ctx->error_depth, txt);
     return 1; /* Accept connection */
 }
 

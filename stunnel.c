@@ -4,7 +4,7 @@
  *                 All Rights Reserved
  *
  *   Version:      3.21                  (stunnel.c)
- *   Date:         2001.09.xx
+ *   Date:         2001.10.31
  *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
@@ -21,6 +21,16 @@
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *   In addition, as a special exception, Michal Trojnara gives
+ *   permission to link the code of this program with the OpenSSL
+ *   library (or with modified versions of OpenSSL that use the same
+ *   license as OpenSSL), and distribute linked combinations including
+ *   the two.  You must obey the GNU General Public License in all
+ *   respects for all of the code used other than OpenSSL.  If you modify
+ *   this file, you may extend this exception to your version of the
+ *   file, but you are not obligated to do so.  If you do not wish to
+ *   do so, delete this exception statement from your version.
  */
 
 #include "common.h"
@@ -44,22 +54,40 @@ static int listen_local();
     /* Error/exceptions handling functions */
 void ioerror(char *);
 void sockerror(char *);
+void log_error(int, int, char *);
+static char *my_strerror(int);
 #ifdef USE_FORK
 static void sigchld_handler(int);
 #endif
 #ifndef USE_WIN32
+void local_handler(int);
 static void signal_handler(int);
+#else
+static BOOL CtrlHandler(DWORD);
 #endif
 
 server_options options;
+
+#ifdef USE_WIN32
+/*
+int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance,
+    PSTR szCmdLine, int iCmdShow) {
+    return 0;
+}
+*/
+#endif
 
     /* Functions */
 int main(int argc, char* argv[]) { /* execution begins here 8-) */
     struct stat st; /* buffer for stat */
 
 #ifdef USE_WIN32
-    if(WSAStartup(0x0101, &wsa_state)!=0) {
+    if(WSAStartup(0x0101, &wsa_state)) {
         sockerror("WSAStartup");
+        exit(1);
+    }
+    if(!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE)) {
+        ioerror("SetConsoleCtrlHandler");
         exit(1);
     }
 #else
@@ -123,18 +151,38 @@ static void daemon_loop() {
     int ls, s;
     struct sockaddr_in addr;
     int addrlen;
+    int max_clients, max_fds, fds_ulimit=-1;
 
+#if defined HAVE_SYSCONF
+    fds_ulimit=sysconf(_SC_OPEN_MAX);
+    if(fds_ulimit<0)
+        ioerror("sysconf");
+#elif defined HAVE_GETRLIMIT
+    struct rlimit rlim;
+    if(getrlimit(RLIMIT_NOFILE, &rlim)<0)
+        ioerror("getrlimit");
+    else
+        fds_ulimit=rlim.rlim_cur;
+    if(fds_ulimit==RLIM_INFINITY)
+        fds_ulimit=-1;
+#endif
+    if(fds_ulimit>=16 && fds_ulimit<FD_SETSIZE)
+        max_fds=fds_ulimit;
+    else
+        max_fds=FD_SETSIZE;
+    max_clients=max_fds>=256 ? max_fds*125/256 : (max_fds-6)/2;
+    log(LOG_NOTICE, "FD_SETSIZE=%d, file ulimit=%d%s -> %d clients allowed",
+        FD_SETSIZE, fds_ulimit, fds_ulimit<0?" (unlimited)":"", max_clients);
     ls=listen_local();
     options.clients=0;
-#ifndef USE_WIN32
 #ifdef USE_FORK
     /* Handle signals about dead children */
     signal(SIGCHLD, sigchld_handler);
-#else /* defined USE_FORK */
-    /* Ignore signals about dead children of clients' threads */
-    signal(SIGCHLD, SIG_IGN);
 #endif /* defined USE_FORK */
-#endif /* ndefined USE_WIN32 */
+#ifdef USE_PTHREAD
+    /* Handle signals about dead local processes */
+    signal(SIGCHLD, local_handler);
+#endif /* defined USE_PTHREAD */
     while(1) {
         addrlen=sizeof(addr);
         do {
@@ -142,13 +190,12 @@ static void daemon_loop() {
         } while(s<0 && get_last_socket_error()==EINTR);
         if(s<0) {
             sockerror("accept");
-            sleep(10);
             continue;
         }
 #ifdef FD_CLOEXEC
         fcntl(s, F_SETFD, FD_CLOEXEC); /* close socket in child execvp */
 #endif
-        if(options.clients<MAX_CLIENTS) {
+        if(options.clients<max_clients) {
             if(create_client(ls, s, client)) {
                 enter_critical_section(CRIT_NTOA); /* inet_ntoa is not mt-safe */
                 log(LOG_WARNING,
@@ -171,6 +218,7 @@ static void daemon_loop() {
             closesocket(s);
         }
     }
+    log(LOG_ERR, "INTERNAL ERROR: End of infinite loop");
 }
 
 #ifndef USE_WIN32
@@ -381,17 +429,128 @@ int set_socket_options(int s, int type) {
 }
 
 void ioerror(char *txt) { /* Input/Output error handler */
-    int error;
-
-    error=get_last_error();
-    log(LOG_ERR, "%s: %s (%d)", txt, strerror(error), error);
+    log_error(LOG_ERR, get_last_error(), txt);
 }
 
 void sockerror(char *txt) { /* Socket error handler */
-    int error;
+    log_error(LOG_ERR, get_last_socket_error(), txt);
+}
 
-    error=get_last_socket_error();
-    log(LOG_ERR, "%s: %s (%d)", txt, strerror(error), error);
+void log_error(int level, int error, char *txt) { /* Generic error logger */
+    log(level, "%s: %s (%d)", txt, my_strerror(error), error);
+}
+
+static char *my_strerror(int errnum) {
+    switch(errnum) {
+#ifdef USE_WIN32
+    case 10004:
+        return "Interrupted system call (WSAEINTR)";
+    case 10009:
+        return "Bad file number (WSAEBADF)";
+    case 10013:
+        return "Permission denied (WSAEACCES)";
+    case 10014:
+        return "Bad address (WSAEFAULT)";
+    case 10022:
+        return "Invalid argument (WSAEINVAL)";
+    case 10024:
+        return "Too many open files (WSAEMFILE)";
+    case 10035:
+        return "Operation would block (WSAEWOULDBLOCK)";
+    case 10036:
+        return "Operation now in progress (WSAEINPROGRESS)";
+    case 10037:
+        return "Operation already in progress (WSAEALREADY)";
+    case 10038:
+        return "Socket operation on non-socket (WSAENOTSOCK)";
+    case 10039:
+        return "Destination address required (WSAEDESTADDRREQ)";
+    case 10040:
+        return "Message too long (WSAEMSGSIZE)";
+    case 10041:
+        return "Protocol wrong type for socket (WSAEPROTOTYPE)";
+    case 10042:
+        return "Bad protocol option (WSAENOPROTOOPT)";
+    case 10043:
+        return "Protocol not supported (WSAEPROTONOSUPPORT)";
+    case 10044:
+        return "Socket type not supported (WSAESOCKTNOSUPPORT)";
+    case 10045:
+        return "Operation not supported on socket (WSAEOPNOTSUPP)";
+    case 10046:
+        return "Protocol family not supported (WSAEPFNOSUPPORT)";
+    case 10047:
+        return "Address family not supported by protocol family (WSAEAFNOSUPPORT)";
+    case 10048:
+        return "Address already in use (WSAEADDRINUSE)";
+    case 10049:
+        return "Can't assign requested address (WSAEADDRNOTAVAIL)";
+    case 10050:
+        return "Network is down (WSAENETDOWN)";
+    case 10051:
+        return "Network is unreachable (WSAENETUNREACH)";
+    case 10052:
+        return "Net dropped connection or reset (WSAENETRESET)";
+    case 10053:
+        return "Software caused connection abort (WSAECONNABORTED)";
+    case 10054:
+        return "Connection reset by peer (WSAECONNRESET)";
+    case 10055:
+        return "No buffer space available (WSAENOBUFS)";
+    case 10056:
+        return "Socket is already connected (WSAEISCONN)";
+    case 10057:
+        return "Socket is not connected (WSAENOTCONN)";
+    case 10058:
+        return "Can't send after socket shutdown (WSAESHUTDOWN)";
+    case 10059:
+        return "Too many references, can't splice (WSAETOOMANYREFS)";
+    case 10060:
+        return "Connection timed out (WSAETIMEDOUT)";
+    case 10061:
+        return "Connection refused (WSAECONNREFUSED)";
+    case 10062:
+        return "Too many levels of symbolic links (WSAELOOP)";
+    case 10063:
+        return "File name too long (WSAENAMETOOLONG)";
+    case 10064:
+        return "Host is down (WSAEHOSTDOWN)";
+    case 10065:
+        return "No Route to Host (WSAEHOSTUNREACH)";
+    case 10066:
+        return "Directory not empty (WSAENOTEMPTY)";
+    case 10067:
+        return "Too many processes (WSAEPROCLIM)";
+    case 10068:
+        return "Too many users (WSAEUSERS)";
+    case 10069:
+        return "Disc Quota Exceeded (WSAEDQUOT)";
+    case 10070:
+        return "Stale NFS file handle (WSAESTALE)";
+    case 10091:
+        return "Network SubSystem is unavailable (WSASYSNOTREADY)";
+    case 10092:
+        return "WINSOCK DLL Version out of range (WSAVERNOTSUPPORTED)";
+    case 10093:
+        return "Successful WSASTARTUP not yet performed (WSANOTINITIALISED)";
+    case 10071:
+        return "Too many levels of remote in path (WSAEREMOTE)";
+    case 11001:
+        return "Host not found (WSAHOST_NOT_FOUND)";
+    case 11002:
+        return "Non-Authoritative Host not found (WSATRY_AGAIN)";
+    case 11003:
+        return "Non-Recoverable errors: FORMERR, REFUSED, NOTIMP (WSANO_RECOVERY)";
+    case 11004:
+        return "Valid name, no data record of requested type (WSANO_DATA)";
+#if 0
+    case 11004: /* typically, only WSANO_DATA is reported */
+        return "No address, look for MX record (WSANO_ADDRESS)";
+#endif
+#endif /* defined USE_WIN32 */
+    default:
+        return strerror(errnum);
+    }
 }
 
 #ifdef USE_FORK
@@ -402,9 +561,8 @@ static void sigchld_handler(int sig) { /* Dead children detected */
     while((pid=wait_for_pid(-1, &status, WNOHANG))>0) {
         options.clients--; /* One client less */
 #else
-    pid=wait(&status);
-    options.clients--; /* One client less */
-    {
+    if((pid=wait(&status))>0) {
+        options.clients--; /* One client less */
 #endif
 #ifdef WIFSIGNALED
         if(WIFSIGNALED(status)) {
@@ -426,9 +584,58 @@ static void sigchld_handler(int sig) { /* Dead children detected */
 
 #ifndef USE_WIN32
 
+void local_handler(int sig) { /* Dead of local (-l) process detected */
+    int pid, status;
+
+#ifdef HAVE_WAIT_FOR_PID
+    while((pid=wait_for_pid(-1, &status, WNOHANG))>0) {
+#else
+    if((pid=wait(&status))>0) {
+#endif
+#ifdef WIFSIGNALED
+        if(WIFSIGNALED(status)) {
+            log(LOG_DEBUG, "Local process %s (PID=%lu) terminated on signal %d",
+                options.servname, pid, WTERMSIG(status));
+        } else {
+            log(LOG_DEBUG, "Local process %s (PID=%lu) finished with code %d",
+                options.servname, pid, WEXITSTATUS(status));
+        }
+#else
+        log(LOG_DEBUG, "Local process %s (PID=%lu) finished with status %d",
+            options.servname, pid, status);
+#endif
+    }
+    signal(SIGCHLD, local_handler);
+}
+
 static void signal_handler(int sig) { /* Signal handler */
     log(LOG_ERR, "Received signal %d; terminating", sig);
     exit(3);
+}
+
+#else /* !defined USE_win32 */
+
+static BOOL CtrlHandler(DWORD fdwCtrlType) {
+    switch(fdwCtrlType) {
+    case CTRL_C_EVENT: /* Handle the CTRL+C signal */
+        log(LOG_NOTICE, "Process exit: CTRL+C");
+        break;
+    case CTRL_CLOSE_EVENT: /* CTRL+CLOSE: confirm that the user wants to exit */
+        log(LOG_NOTICE, "Process exit: window closed");
+        break;
+    case CTRL_BREAK_EVENT:
+        log(LOG_NOTICE, "Process exit: CTRL+BREAK");
+        break;
+    case CTRL_LOGOFF_EVENT:
+        log(LOG_NOTICE, "Process exit: user logoff");
+        break;
+    case CTRL_SHUTDOWN_EVENT:
+        log(LOG_NOTICE, "Process exit: system shutdown");
+        break;
+    default:
+        return FALSE;
+    }
+    ExitProcess(0);
 }
 
 #endif /* !defined USE_WIN32 */

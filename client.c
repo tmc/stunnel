@@ -16,6 +16,16 @@
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *   In addition, as a special exception, Michal Trojnara gives
+ *   permission to link the code of this program with the OpenSSL
+ *   library (or with modified versions of OpenSSL that use the same
+ *   license as OpenSSL), and distribute linked combinations including
+ *   the two.  You must obey the GNU General Public License in all
+ *   respects for all of the code used other than OpenSSL.  If you modify
+ *   this file, you may extend this exception to your version of the
+ *   file, but you are not obligated to do so.  If you do not wish to
+ *   do so, delete this exception statement from your version.
  */
 
 /* Non-blocking sockets are disabled by default */
@@ -68,12 +78,11 @@ static int auth_libwrap(CLI *);
 static int auth_user(CLI *);
 static int connect_local(CLI *c);
 #ifndef USE_WIN32
-static void wait_local(CLI *c);
 static int make_sockets(int [2]);
 #endif
 static int connect_remote(CLI *c);
 static int waitforsocket(int, int);
-static void reset(int, int, char *);
+static void reset(int, char *);
 
 FD d[MAX_FD];
 
@@ -108,10 +117,6 @@ void *client(void *local) {
     if(c->remote_fd>=0)
         cleanup_remote(c);
     cleanup_local(c);
-#ifndef USE_WIN32
-    if(!(options.option&OPT_REMOTE))
-        wait_local(c);
-#endif /* USE_WIN32 */
     free(c);
 #ifndef USE_FORK
     enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
@@ -513,17 +518,21 @@ static void cleanup_ssl(CLI *c) {
 }
 
 static void cleanup_remote(CLI *c) {
-    reset(c->error, c->remote_fd, "linger (remote_fd)");
+    if(c->error)
+        reset(c->remote_fd, "linger (remote_fd)");
     closesocket(c->remote_fd);
 }
 
 static void cleanup_local(CLI *c) {
     if(c->local_rfd==c->local_wfd) {
-        reset(c->error, c->local_rfd, "linger (local)");
+        if(c->error)
+            reset(c->local_rfd, "linger (local)");
         closesocket(c->local_rfd);
     } else {
-        reset(c->error, c->local_rfd, "linger (local_rfd)");
-        reset(c->error, c->local_wfd, "linger (local_wfd)");
+        if(c->error)
+            reset(c->local_rfd, "linger (local_rfd)");
+        if(c->error)
+            reset(c->local_wfd, "linger (local_wfd)");
     }
 }
 
@@ -723,56 +732,6 @@ static int connect_local(CLI *c) { /* spawn local process */
 
 #ifndef USE_WIN32
 
-static void wait_local(CLI *c) {
-    int status;
-
-#ifdef HAVE_WAIT_FOR_PID
-    switch(wait_for_pid(c->pid, &status, WNOHANG)) {
-    case -1: /* Error */
-        if(get_last_socket_error()==ECHILD)
-            return; /* No zombie created */
-        ioerror("wait_for_pid#1");
-        return;
-    case 0: /* Child is still alive */
-        log(LOG_DEBUG, "Killing local mode child (PID=%lu)", c->pid);
-        if(kill(c->pid, 9)<0) {
-            ioerror("kill");
-            return;
-        }
-        if(wait_for_pid(c->pid, &status, 0)<0) {
-            if(get_last_socket_error()==ECHILD)
-                return; /* No zombie created */
-            ioerror("wait_for_pid#2");
-            return;
-        }
-    default: /* Child is dead */
-        break;
-    }
-#else /* HAVE WAIT_FOR_PID */
-    log(LOG_DEBUG, "Killing local mode child (PID=%lu)", c->pid);
-    if(kill(c->pid, 9)<0) {
-        ioerror("kill");
-        return;
-    }
-    if(wait(&status)<0) {
-        ioerror("wait");
-        return;
-    }
-#endif /* HAVE_WAIT_FOR_PID */
-#ifdef WIFSIGNALED
-    if(WIFSIGNALED(status)) {
-        log(LOG_DEBUG, "Local process %s (PID=%lu) terminated on signal %d",
-            options.servname, c->pid, WTERMSIG(status));
-    } else {
-        log(LOG_DEBUG, "Local process %s (PID=%lu) finished with code %d",
-            options.servname, c->pid, WEXITSTATUS(status));
-    }
-#else
-    log(LOG_DEBUG, "Local process %s (PID=%lu) finished with status %d",
-        options.servname, c->pid, status);
-#endif
-}
-
 static int make_sockets(int fd[2]) { /* make pair of connected sockets */
 #ifdef INET_SOCKET_PAIR
     struct sockaddr_in addr;
@@ -793,11 +752,9 @@ static int make_sockets(int fd[2]) { /* make pair of connected sockets */
     addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
     addr.sin_port=0; /* dynamic port allocation */
     if(bind(s, (struct sockaddr *)&addr, addrlen))
-        log(LOG_DEBUG, "bind#1: %s (%d)",
-            strerror(get_last_socket_error()), get_last_socket_error());
+        log_error(LOG_DEBUG, get_last_socket_error(), "bind#1");
     if(bind(fd[1], (struct sockaddr *)&addr, addrlen))
-        log(LOG_DEBUG, "bind#2: %s (%d)",
-            strerror(get_last_socket_error()), get_last_socket_error());
+        log_error(LOG_DEBUG, get_last_socket_error(), "bind#2");
     if(listen(s, 5)) {
         sockerror("listen");
         return -1;
@@ -947,15 +904,16 @@ static int waitforsocket(int fd, int dir) {
     return ready;
 }
 
-static void reset(int err, int fd, char *txt) { /* Set lingering on a socket */
+static void reset(int fd, char *txt) {
+    /* Set lingering on a socket if needed*/
     struct linger l;
 
-    if(!err || !d[fd].is_socket)
+    if(!d[fd].is_socket)
         return; /* No need to set lingering option */
     l.l_onoff=1;
     l.l_linger=0;
     if(setsockopt(fd, SOL_SOCKET, SO_LINGER, (void *)&l, sizeof(l)))
-        sockerror(txt);
+        log_error(LOG_DEBUG, get_last_socket_error(), txt);
 }
 
 /* End of client.c */

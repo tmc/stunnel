@@ -27,7 +27,9 @@
 
 void ioerror(char *);
 void sockerror(char *);
+void log_error(int, int, char *);
 int set_socket_options(int, int);
+void local_handler(int);
 
 /* Prototypes for ssl.c */
 

@@ -122,7 +122,6 @@ typedef unsigned __int64 u64;
 int _vsnprintf(char *, int, char *, ...);
 */
 #define strcasecmp _stricmp
-#define sleep _sleep
 
 #define get_last_socket_error() WSAGetLastError()
 #define get_last_error()        GetLastError()
@@ -184,6 +183,9 @@ typedef unsigned long long u64;
 #include <getopt.h>      /* getopt */
 /* Assume that we have getopt() function */
 #define HAVE_GETOPT      1
+#endif
+#ifdef HAVE_SYS_RESOURCE_H
+#include <sys/resource.h> /* getrlimit */
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>      /* getpid, fork, execvp, exit */
@@ -257,15 +259,6 @@ extern char *sys_errlist[];
 /* change all unsafe characters to '.' */
 #define safename(s) \
     do {char *p; for(p=(s); *p; p++) if(!isalnum((int)*p)) *p='.';} while(0)
-
-#ifndef FD_SETSIZE
-/* 1024 is a common value */
-#define FD_SETSIZE 1024
-#endif
-
-/* Max number of children is limited by FD_SETSIZE */
-/* Do not increase it over 500 */
-#define MAX_CLIENTS ((FD_SETSIZE-24)/2)
 
 #endif /* defined COMMON_H */
 
