@@ -5,7 +5,7 @@
  *
  *   Version:      3.19                  (stunnel.c)
  *   Date:         2001.08.10
- *   
+ *
  *   Author:       Michal Trojnara  <Michal.Trojnara@mirt.net>
  *
  *   This program is free software; you can redistribute it and/or modify
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
     /* process options */
     options.foreground=1;
     options.cert_defaults = CERT_DEFAULTS;
-    
+
     safecopy(options.pem, PEM_DIR);
     if ( options.pem[0] ) { safeconcat(options.pem, "/"); }
     safeconcat(options.pem, "stunnel.pem");
@@ -253,7 +253,7 @@ static void create_pid() {
         force_dir=0; /* this can be either a file or a directory */
     }
     if(!stat(tmpdir, &sb) && S_ISDIR(sb.st_mode)) { /* directory */
-#ifdef HAVE_SNPRINTF 
+#ifdef HAVE_SNPRINTF
         snprintf(options.pidfile, STRLEN,
             "%s/stunnel.%s.pid", tmpdir, options.servname);
 #else
@@ -377,7 +377,7 @@ int connect_local(u32 ip) { /* spawn local process */
     char text[STRLEN];
     int fd[2];
     unsigned long pid;
-   
+
     if (options.option & OPT_PTY) {
         char tty[STRLEN];
 
@@ -585,13 +585,24 @@ int set_socket_options(int s, int type) {
     sock_opt *ptr;
     extern sock_opt sock_opts[];
     static char *type_str[3]={"accept", "local", "remote"};
+    int opt_size;
 
     for(ptr=sock_opts;ptr->opt_str;ptr++) {
         if(!ptr->opt_val[type])
             continue; /* default */
+        switch(ptr->opt_type) {
+        case TYPE_LINGER:
+            opt_size=sizeof(struct linger); break;
+        case TYPE_TIMEVAL:
+            opt_size=sizeof(struct timeval); break;
+        case TYPE_STRING:
+            opt_size=strlen(ptr->opt_val[type]->c_val)+1; break;
+        default:
+            opt_size=sizeof(int); break;
+        }
         if(setsockopt(s, ptr->opt_level, ptr->opt_name,
-                (void *)ptr->opt_val[type], sizeof(opt_union))) {
-            sockerror("setsockopt");
+                (void *)ptr->opt_val[type], opt_size)) {
+            sockerror(ptr->opt_str);
             return -1; /* FAILED */
         } else {
             log(LOG_DEBUG, "%s option set on %s socket",

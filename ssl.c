@@ -103,10 +103,8 @@ static unsigned char *sid_ctx=(unsigned char *)"stunnel SID";
     /* const allowed here */
 #endif
 
-
 /* shortcut to determine if sufficient entropy for PRNG is present */
 int prng_seeded( int bytes ) {
-
 #if SSLEAY_VERSION_NUMBER >= 0x0090581fL
     if ( RAND_status() ) {
     	log(LOG_DEBUG, "RAND_status claims sufficient entropy for the PRNG");
@@ -118,7 +116,6 @@ int prng_seeded( int bytes ) {
 	return(1);
     }
 #endif
-
     return(0);	/* assume we don't have enough */
 }
 
@@ -128,7 +125,7 @@ int add_rand_file( char *filename ) {
     struct stat sb;
 
     if ( stat(filename, &sb) !=0 ) { return(0); }
-    
+
     if ( (readbytes = RAND_load_file(filename, options.random_bytes )) ) {
 	log(LOG_DEBUG, "Snagged %d random bytes from %s", readbytes, filename);
     } else {
@@ -140,15 +137,13 @@ int add_rand_file( char *filename ) {
 	writebytes = RAND_write_file(filename);
     	if ( -1 == writebytes ) {
 		log(LOG_WARNING, "Failed to write strong random data to %s.  May "
-			"be a permissions or seeding problem", filename); 
+			"be a permissions or seeding problem", filename);
 	} else {
 		log(LOG_DEBUG, "Wrote %d new random bytes to %s", writebytes, filename);
 	}
     }
     return(readbytes);
 }
-
-
 
 void initialize_prng( void ) {
     int totbytes=0;
@@ -216,7 +211,6 @@ void initialize_prng( void ) {
 #endif /* OpenSSL-0.9.5a */
 #endif /* USE_WIN32 */
 
-
     /* Try the good-old default /dev/urandom, if available  */
     totbytes += add_rand_file( "/dev/urandom" );
     if ( prng_seeded(totbytes) ) { goto SEEDED; }
@@ -226,11 +220,9 @@ void initialize_prng( void ) {
     log(LOG_INFO, "PRNG seeded with %d bytes total", totbytes);
     log(LOG_WARNING, "PRNG may not have been seeded with enough random bytes");
     return;
-
 SEEDED:
     log(LOG_INFO, "PRNG seeded successfully");
     return;
-    
 }
 
 void verify_info() {
@@ -327,7 +319,7 @@ dh_done:
 	log(LOG_DEBUG, "cert_file is %s", options.cert_file);
 	if ( options.cert_defaults & SSL_CERT_DEFAULTS ) {
 		log(LOG_DEBUG, "Initializing SSL library verify paths");
-		if ((!SSL_CTX_set_default_verify_paths(ctx))) { 
+		if ((!SSL_CTX_set_default_verify_paths(ctx))) {
 		    sslerror("X509_set_default_verify_paths");
 		    exit(1);
 		}
@@ -336,9 +328,9 @@ dh_done:
 	/* put in defaults (if not set on cmd line) if -S says to */
 	if ( options.cert_defaults & STUNNEL_CERT_DEFAULTS ) {
 		log(LOG_DEBUG, "installing defaults where not set");
-		if ( ! options.cert_file[0] ) 
+		if ( ! options.cert_file[0] )
 			safecopy(options.cert_file, CERT_FILE);
-		if ( ! options.cert_dir[0] ) 
+		if ( ! options.cert_dir[0] )
 			safecopy(options.cert_dir, CERT_DIR);
 	}
 	if ( options.cert_file[0] ) {
@@ -348,7 +340,7 @@ dh_done:
 		sslerror("SSL_CTX_load_verify_locations");
 		exit(1);
 	    }
-            SSL_CTX_set_client_CA_list(ctx, 
+            SSL_CTX_set_client_CA_list(ctx,
 		SSL_load_client_CA_file(options.cert_file));
 	    log(LOG_DEBUG, "Loaded verify certificates from %s",
 		options.cert_file);
@@ -373,11 +365,8 @@ dh_done:
 
         SSL_CTX_set_verify(ctx, options.verify_level, verify_callback);
 
-
         if (options.verify_use_only_my)
             log(LOG_NOTICE, "Peer certificate location %s", options.cert_dir);
-
-
     }
     SSL_CTX_set_info_callback(ctx, info_callback);
     if(options.cipher_list) {
@@ -387,7 +376,6 @@ dh_done:
         }
     }
 }
-
 
 void context_free() { /* free SSL */
     SSL_CTX_free(ctx);
@@ -536,23 +524,23 @@ cleanup_ssl: /* close SSL and reset sockets */
 cleanup_remote: /* reset remote and local socket */
     if(options.option&OPT_REMOTE)
         if(setsockopt(remote, SOL_SOCKET, SO_LINGER,
-                (char *)&l, sizeof(l)) &&
+                (void *)&l, sizeof(l)) &&
                 get_last_socket_error()!=ENOTSOCK)
             sockerror("linger (remote)");
     closesocket(remote);
 cleanup_local: /* reset local socket */
     if(local==STDIO_FILENO) {
         if(setsockopt(local_rd, SOL_SOCKET, SO_LINGER,
-                (char *)&l, sizeof(l)) &&
+                (void *)&l, sizeof(l)) &&
                 get_last_socket_error()!=ENOTSOCK)
             sockerror("linger (local_rd)");
         if(setsockopt(local_wr, SOL_SOCKET, SO_LINGER,
-                (char *)&l, sizeof(l)) &&
+                (void *)&l, sizeof(l)) &&
                 get_last_socket_error()!=ENOTSOCK)
             sockerror("linger (local_wr)");
     } else {
         if(setsockopt(local, SOL_SOCKET, SO_LINGER,
-                (char *)&l, sizeof(l)) &&
+                (void *)&l, sizeof(l)) &&
                 get_last_socket_error()!=ENOTSOCK)
             sockerror("linger (local)");
         closesocket(local);

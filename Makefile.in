@@ -61,7 +61,7 @@ installdirs: mkinstalldirs
 
 # non-standard external rules
 
-stunnel.exe: $(WINSRC)
+stunnel.exe: $(WINSRC) Makefile common.h
 	$(WINGCC) $(WINCFLAGS) -s -o stunnel.exe $(WINSRC) $(WINLIBS)
 
 stunnel.8: stunnel.sdf
