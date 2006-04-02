@@ -459,6 +459,10 @@ Use this option to bind a static local \s-1IP\s0 address, instead.
 Negotiate \s-1SSL\s0 with specified protocol
 .Sp
 currently supported: cifs, nntp, pop3, smtp
+.IP "\fBxforwardedfor\fR = yes | no" 4
+.IX Item "xforwardedfor = yes | no"
+append an 'X-Forwarded-For:' HTTP request header providing the
+client's IP address to the server.
 .IP "\fBpty\fR = yes | no (Unix only)" 4
 .IX Item "pty = yes | no (Unix only)"
 allocate pseudo terminal for 'exec' option

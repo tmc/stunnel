@@ -273,6 +273,9 @@ extern char *sys_errlist[];
 /* I/O buffer size */
 #define BUFFSIZE        16384
 
+/* maximum space reserved for header insertion in BUFFSIZE */
+#define BUFF_RESERVED	1024
+
 /* Length of strings (including the terminating '\0' character) */
 #define STRLEN          256
 
