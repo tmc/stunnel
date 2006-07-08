@@ -90,6 +90,12 @@ void *alloc_client_session(LOCAL_OPTIONS *opt, int rfd, int wfd) {
         return NULL;
     }
     c->opt=opt;
+    /* some options need space to add some information */
+    if (c->opt->option.xforwardedfor)
+	c->buffsize = BUFFSIZE - BUFF_RESERVED;
+    else
+	c->buffsize = BUFFSIZE;
+    c->crlf_seen=0;
     c->local_rfd.fd=rfd;
     c->local_wfd.fd=wfd;
     return c;
@@ -373,6 +379,28 @@ static void init_ssl(CLI *c) {
     }
 }
 
+/* Moves all data from the buffer <buffer> between positions <start> and <stop>
+ * to insert <string> of length <len>. <start> and <stop> are updated to their
+ * new respective values, and the number of characters inserted is returned.
+ * If <len> is too long, nothing is done and -1 is returned.
+ * Note that neither <string> nor <buffer> can be NULL.
+ */
+static int buffer_insert_with_len(char *buffer, int *start, int *stop, int limit, char *string, int len) {
+    if (len > limit - *stop)
+	return -1;
+    if (*start > *stop)
+	return -1;
+    memmove(buffer + *start + len, buffer + *start, *stop - *start);
+    memcpy(buffer + *start, string, len);
+    *start += len;
+    *stop += len;
+    return len;
+}
+
+static int buffer_insert(char *buffer, int *start, int *stop, int limit, char *string) {
+    return buffer_insert_with_len(buffer, start, stop, limit, string, strlen(string));
+}
+
 /****************************** some defines for transfer() */
 /* is socket/SSL open for read/write? */
 #define sock_rd (c->sock_rfd->rd)
@@ -409,9 +437,9 @@ static void transfer(CLI *c) {
 
         /****************************** setup c->fds structure */
         s_poll_zero(&c->fds); /* Initialize the structure */
-        if(sock_rd && c->sock_ptr<BUFFSIZE) /* socket input buffer not full*/
+        if(sock_rd && c->sock_ptr<c->buffsize) /* socket input buffer not full*/
             s_poll_add(&c->fds, c->sock_rfd->fd, 1, 0);
-        if((ssl_rd && c->ssl_ptr<BUFFSIZE) || /* SSL input buffer not full */
+        if((ssl_rd && c->ssl_ptr<c->buffsize) || /* SSL input buffer not full */
                 ((c->sock_ptr || ssl_closing==CL_RETRY) && want_rd))
                 /* want to SSL_write or SSL_shutdown but read from the
                  * underlying socket needed for the SSL protocol */
@@ -420,7 +448,7 @@ static void transfer(CLI *c) {
             s_poll_add(&c->fds, c->sock_wfd->fd, 0, 1);
         if(c->sock_ptr || /* socket input buffer not empty */
                 ssl_closing==CL_INIT /* need to send close_notify */ ||
-                ((c->ssl_ptr<BUFFSIZE || ssl_closing==CL_RETRY) && want_wr))
+                ((c->ssl_ptr<c->buffsize || ssl_closing==CL_RETRY) && want_wr))
                 /* want to SSL_read or SSL_shutdown but write to the
                  * underlying socket needed for the SSL protocol */
             s_poll_add(&c->fds, c->ssl_wfd->fd, 0, 1);
@@ -479,7 +507,7 @@ static void transfer(CLI *c) {
                 break;
             default:
                 memmove(c->ssl_buff, c->ssl_buff+num, c->ssl_ptr-num);
-                if(c->ssl_ptr==BUFFSIZE) /* buffer was previously full */
+                if(c->ssl_ptr>=c->buffsize) /* buffer was previously full */
                     check_SSL_pending=1; /* check for data buffered by SSL */
                 c->ssl_ptr-=num;
                 c->sock_bytes+=num;
@@ -530,7 +558,7 @@ static void transfer(CLI *c) {
         /****************************** read from socket */
         if(sock_rd && sock_can_rd) {
             num=readsocket(c->sock_rfd->fd,
-                c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr);
+                c->sock_buff+c->sock_ptr, c->buffsize-c->sock_ptr);
             switch(num) {
             case -1:
                 parse_socket_error(c, "readsocket");
@@ -546,16 +574,76 @@ static void transfer(CLI *c) {
         }
 
         /****************************** read from SSL */
-        if(ssl_rd && c->ssl_ptr<BUFFSIZE  && ( /* input buffer not full */
+        if(ssl_rd && c->ssl_ptr<c->buffsize  && ( /* input buffer not full */
                 ssl_can_rd || (want_wr && ssl_can_wr) ||
                 /* SSL_read wants to write to the underlying descriptor */
                 (check_SSL_pending && SSL_pending(c->ssl))
                 /* write made space from full buffer */
                 )) {
-            num=SSL_read(c->ssl, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr);
+            num=SSL_read(c->ssl, c->ssl_buff+c->ssl_ptr, c->buffsize-c->ssl_ptr);
             switch(err=SSL_get_error(c->ssl, num)) {
             case SSL_ERROR_NONE:
-                c->ssl_ptr+=num;
+		if (c->buffsize != BUFFSIZE) { /* some work left to do */
+		    int last = c->ssl_ptr;
+		    c->ssl_ptr += num;
+
+		    /* Look for end of HTTP headers between last and ssl_ptr.
+		     * To achieve this reliably, we have to count the number of
+		     * successive [CR]LF and to memorize it in case it's spread
+		     * over multiple segments. --WT.
+		     */
+		    while (last < c->ssl_ptr) {
+			if (c->ssl_buff[last] == '\n') {
+			    if (++c->crlf_seen == 2)
+				break;
+			} else if (last < c->ssl_ptr - 1 &&
+			           c->ssl_buff[last] == '\r' &&
+				   c->ssl_buff[last+1] == '\n') {
+			    if (++c->crlf_seen == 2)
+				break;
+			    last++;
+			} else if (c->ssl_buff[last] != '\r')
+			    /* don't refuse '\r' because we may get a '\n' on next read */
+			    c->crlf_seen = 0;
+			last++;
+		    }
+		    if (c->crlf_seen >= 2) {
+			/* We have all the HTTP headers now. We don't need to
+			 * reserve any space anymore. <ssl_ptr> points to the
+			 * first byte of unread data, and <last> points to the
+			 * exact location where we want to insert our headers,
+			 * which is right before the empty line.
+			 */
+			c->buffsize = BUFFSIZE;
+
+			if (c->opt->option.xforwardedfor) {
+			    /* X-Forwarded-For: xxxx \r\n\0 */
+			    char xforw[17 + IPLEN + 3];
+
+			    /* We will insert our X-Forwarded-For: header here.
+			     * We need to write the IP address, but if we use
+			     * sprintf, it will pad with the terminating 0.
+			     * So we will pass via a temporary buffer allocated
+			     * on the stack.
+			     */
+			    memcpy(xforw, "X-Forwarded-For: ", 17);
+			    if (getnameinfo(&c->peer_addr.addr[0].sa,
+					    addr_len(c->peer_addr.addr[0]),
+					    xforw + 17, IPLEN, NULL, 0,
+					    NI_NUMERICHOST) == 0) {
+				strcat(xforw + 17, "\r\n");
+				buffer_insert(c->ssl_buff, &last, &c->ssl_ptr,
+					      c->buffsize, xforw);
+			    }
+			    /* last still points to the \r\n and ssl_ptr to the
+			     * end of the buffer, so we may add as many headers
+			     * as wee need to.
+			     */
+			}			
+		    }
+		}
+		else
+		    c->ssl_ptr+=num;
                 watchdog=0; /* reset watchdog */
                 break;
             case SSL_ERROR_WANT_WRITE:

@@ -446,6 +446,10 @@ the following option can be used:
 application protocol to negotiate \s-1SSL\s0
 .Sp
 currently supported: cifs, connect, nntp, pop3, smtp
+.IP "\fBxforwardedfor\fR = yes | no" 4
+.IX Item "xforwardedfor = yes | no"
+append an 'X-Forwarded-For:' HTTP request header providing the
+client's IP address to the server.
 .IP "\fBprotocolCredentials\fR = username:password" 4
 .IX Item "protocolCredentials = username:password"
 credentials for protocol negotiations
