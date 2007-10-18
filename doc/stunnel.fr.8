@@ -445,6 +445,10 @@ Cette option permet de relier une adresse statique locale.
 Négocie avec \s-1SSL\s0 selon le protocole indiqué
 .Sp
 Actuellement gérés\ : cifs, nntp, pop3, smtp
+.IP "\fBxforwardedfor\fR = yes | no" 4
+.IX Item "xforwardedfor = yes | no"
+Ajoute un en-tête 'X-Forwarded-For:' dans la requête HTTP fournissant
+au serveur l'adresse IP du client.
 .IP "\fBpty\fR = yes | no (Unix seulement)" 4
 .IX Item "pty = yes | no (Unix seulement)"
 Alloue un pseudo-terminal pour l'option «\ exec\ »

@@ -704,6 +704,29 @@ static char *service_options(CMD cmd, LOCAL_OPTIONS *section,
     }
 #endif
 
+    /* xforwardedfor */
+    switch(cmd) {
+    case CMD_INIT:
+        section->option.xforwardedfor=0;
+        break;
+    case CMD_EXEC:
+        if(strcasecmp(opt, "xforwardedfor"))
+            break;
+        if(!strcasecmp(arg, "yes"))
+            section->option.xforwardedfor=1;
+        else if(!strcasecmp(arg, "no"))
+            section->option.xforwardedfor=0;
+        else
+            return "argument should be either 'yes' or 'no'";
+        return NULL; /* OK */
+    case CMD_DEFAULT:
+        break;
+    case CMD_HELP:
+        log_raw("%-15s = yes|no append an HTTP X-Forwarded-For header",
+            "xforwardedfor");
+        break;
+    }
+
     /* exec */
 #ifndef USE_WIN32
     switch(cmd) {
