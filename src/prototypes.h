@@ -227,6 +227,7 @@ typedef struct local_options {
         unsigned int accept:1;
         unsigned int remote:1;
         unsigned int retry:1; /* loop remote+program */
+        unsigned int xforwardedfor:1;
 #ifndef USE_WIN32
         unsigned int program:1;
         unsigned int pty:1;
@@ -330,6 +331,8 @@ typedef struct {
     FD *ssl_rfd, *ssl_wfd; /* Read and write SSL descriptors */
     int sock_bytes, ssl_bytes; /* Bytes written to socket and ssl */
     s_poll_set fds; /* File descriptors */
+    int buffsize;  /* current buffer size, may be lower than BUFFSIZE */
+    int crlf_seen; /* the number of successive CRLF seen */
 } CLI;
 
 extern int max_clients;
