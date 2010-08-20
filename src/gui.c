@@ -537,7 +537,7 @@ static LRESULT CALLBACK pass_proc(HWND hDlg, UINT message,
 
     switch(message) {
     case WM_INITDIALOG:
-        /* set the default push button to "Cancel." */
+        /* set the default push button to "Cancel" */
         SendMessage(hDlg, DM_SETDEFID, (WPARAM) IDCANCEL, (LPARAM) 0);
 
         keyFileName = str2tstr(ui_data->section->key);
@@ -600,6 +600,13 @@ int passwd_cb(char *buf, int size, int rwflag, void *userdata) {
 #ifdef HAVE_OSSL_ENGINE_H
 int pin_cb(UI *ui, UI_STRING *uis) {
     ui_data=UI_get_app_data(ui);
+    if (!ui_data) 
+        ui_data=UI_get0_user_data(ui);
+
+    if(!ui_data) {
+        s_log(LOG_ERR, "Broken OpenSSL engine failed to pass UI_DATA value");
+        return 0;
+    }
     if(!DialogBox(ghInst, TEXT("PassBox"), hwnd, (DLGPROC)pass_proc))
         return 0; /* error */
     UI_set_result(ui, uis, ui_data->pass);

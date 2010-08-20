@@ -90,7 +90,7 @@ int s_poll_canread(s_poll_set *fds, int fd) {
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
-            return fds->ufds[i].revents&~POLLOUT; /* read or error */
+            return fds->ufds[i].revents&POLLIN; /* read */
     return 0;
 }
 
@@ -100,6 +100,15 @@ int s_poll_canwrite(s_poll_set *fds, int fd) {
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
             return fds->ufds[i].revents&POLLOUT; /* write */
+    return 0;
+}
+
+int s_poll_error(s_poll_set *fds, int fd) {
+    int i;
+
+    for(i=0; i<fds->nfds; i++)
+        if(fds->ufds[i].fd==fd)
+            return fds->ufds[i].revents&POLLERR; /* error */
     return 0;
 }
 
@@ -283,7 +292,7 @@ int s_poll_wait(s_poll_set *fds, int sec, int msec) {
 void s_poll_init(s_poll_set *fds) {
     FD_ZERO(&fds->irfds);
     FD_ZERO(&fds->iwfds);
-    fds->max = 0; /* no file descriptors */
+    fds->max=0; /* no file descriptors */
 }
 
 void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
@@ -291,8 +300,9 @@ void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
         FD_SET(fd, &fds->irfds);
     if(wr)
         FD_SET(fd, &fds->iwfds);
-    if(fd > fds->max)
-        fds->max = fd;
+    FD_SET(fd, &fds->iefds);
+    if(fd>fds->max)
+        fds->max=fd;
 }
 
 int s_poll_canread(s_poll_set *fds, int fd) {
@@ -303,6 +313,10 @@ int s_poll_canwrite(s_poll_set *fds, int fd) {
     return FD_ISSET(fd, &fds->owfds);
 }
 
+int s_poll_error(s_poll_set *fds, int fd) {
+    return FD_ISSET(fd, &fds->oefds);
+}
+
 int s_poll_wait(s_poll_set *fds, int sec, int msec) {
     int retval, retry;
     struct timeval tv, *tv_ptr;
@@ -311,6 +325,7 @@ int s_poll_wait(s_poll_set *fds, int sec, int msec) {
         retry=0;
         memcpy(&fds->orfds, &fds->irfds, sizeof(fd_set));
         memcpy(&fds->owfds, &fds->iwfds, sizeof(fd_set));
+        memcpy(&fds->oefds, &fds->iefds, sizeof(fd_set));
         if(sec<0) { /* infinite timeout */
             tv_ptr=NULL;
         } else {
@@ -318,7 +333,7 @@ int s_poll_wait(s_poll_set *fds, int sec, int msec) {
             tv.tv_usec=1000*msec;
             tv_ptr=&tv;
         }
-        retval=select(fds->max+1, &fds->orfds, &fds->owfds, NULL, tv_ptr);
+        retval=select(fds->max+1, &fds->orfds, &fds->owfds, &fds->oefds, tv_ptr);
 #if !defined(USE_WIN32) && !defined(USE_OS2)
         if(sec<0 && retval>0 && s_poll_canread(fds, signal_pipe[0])) {
             signal_pipe_empty(); /* no timeout -> main loop */
@@ -583,7 +598,7 @@ int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
         s_log(LOG_ERR, "connect_blocking: s_poll_wait %s: timeout", dst);
         return -1;
     default:
-        if(s_poll_canread(&c->fds, c->fd)) {
+        if(s_poll_canread(&c->fds, c->fd) || s_poll_error(&c->fds, c->fd)) {
             /* newly connected socket should not be ready for read */
             /* get the resulting error code, now */
             optlen=sizeof error;

@@ -113,7 +113,6 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
-USE_DH = @USE_DH@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -412,7 +411,7 @@ uninstall-man: uninstall-man8
 
 
 .pod.8:
-	pod2man --section=8 --release=4.33 --center=stunnel \
+	pod2man --section=8 --release=4.34 --center=stunnel \
 		--date=`date +%Y.%m.%d` -u $< $@
 
 stunnel.html: stunnel.pod

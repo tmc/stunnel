@@ -1,9 +1,9 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([stunnel],[4.33])
+AC_INIT([stunnel],[4.34])
 AC_MSG_NOTICE([**************************************** initialization])
 AC_CONFIG_AUX_DIR(auto)
-AM_INIT_AUTOMAKE(stunnel, 4.33)
+AM_INIT_AUTOMAKE(stunnel, 4.34)
 AC_CONFIG_SRCDIR([src/stunnel.c])
 
 AC_CANONICAL_HOST
@@ -281,45 +281,6 @@ AC_CHECK_HEADER([$ssldir/include/openssl/engine.h],
     [AC_MSG_WARN([Openssl engine header not found])])
 
 AC_MSG_NOTICE([**************************************** optional features])
-# Use RSA?
-AC_MSG_CHECKING([whether to disable RSA support])
-AC_ARG_ENABLE(rsa,
-[  --disable-rsa           Disable RSA support],
-    [
-        case "$enableval" in
-            yes) AC_MSG_RESULT([no])
-                ;;
-            no) AC_MSG_RESULT([yes])
-                AC_DEFINE(NO_RSA)
-                ;;
-            *) AC_MSG_ERROR([bad value ${enableval}])
-                ;;
-        esac
-    ],
-    [AC_MSG_RESULT([no])]
-)
-
-# Use DH?
-AC_MSG_CHECKING([whether to enable DH support])
-AC_ARG_ENABLE(dh,
-[  --enable-dh             Enable DH support],
-    [
-        case "$enableval" in
-            yes)
-                AC_MSG_RESULT([yes])
-                USE_DH=1
-                AC_DEFINE(USE_DH)
-                ;;
-            no) AC_MSG_RESULT([no])
-                ;;
-            *) AC_MSG_ERROR([bad value ${enableval}])
-                ;;
-        esac
-    ],
-    [AC_MSG_RESULT([no])]
-)
-AC_SUBST(USE_DH)
-
 # Use IPv6?
 AC_MSG_CHECKING([whether to enable IPv6 support])
 AC_ARG_ENABLE(ipv6,

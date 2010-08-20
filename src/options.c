@@ -50,7 +50,7 @@
 
 #define CONFLINELEN (16*1024)
 
-static int section_init(int, SERVICE_OPTIONS *, int);
+static int section_init(int, char *, SERVICE_OPTIONS *, int);
 
 static int parse_debug_level(char *);
 static int parse_ssl_option(char *);
@@ -60,8 +60,8 @@ static int parse_socket_option(char *);
 static char *parse_ocsp_url(SERVICE_OPTIONS *, char *);
 static unsigned long parse_ocsp_flag(char *);
 
-static void syntax(void);
-static void config_error(int, char *);
+static void syntax(CONF_TYPE);
+static void config_error(int, char *, char *);
 static char *stralloc(char *);
 #ifndef USE_WIN32
 static char **argalloc(char *);
@@ -317,7 +317,9 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
     case CMD_EXEC:
         if(strcasecmp(opt, "RNDbytes"))
             break;
-        new_global_options.random_bytes=atoi(arg);
+        new_global_options.random_bytes=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return "Illegal number of bytes to read from random seed files";
         return NULL; /* OK */
     case CMD_DEFAULT:
         s_log(LOG_NOTICE, "%-15s = %d", "RNDbytes", RANDOM_BYTES);
@@ -407,11 +409,12 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
         if(strcasecmp(opt, "setgid"))
             break;
         gr=getgrnam(arg);
-        if(gr)
+        if(gr) {
             new_global_options.gid=gr->gr_gid;
-        else if(atoi(arg)) /* numerical? */
-            new_global_options.gid=atoi(arg);
-        else
+            return NULL; /* OK */
+        }
+        new_global_options.gid=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal GID";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -432,11 +435,12 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
         if(strcasecmp(opt, "setuid"))
             break;
         pw=getpwnam(arg);
-        if(pw)
+        if(pw) {
             new_global_options.uid=pw->pw_uid;
-        else if(atoi(arg)) /* numerical? */
-            new_global_options.uid=atoi(arg);
-        else
+            return NULL; /* OK */
+        }
+        new_global_options.uid=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal UID";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -524,6 +528,7 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
 
 static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         char *opt, char *arg) {
+    char *tmpstr;
     int tmpnum;
 
     if(cmd==CMD_DEFAULT || cmd==CMD_HELP) {
@@ -748,6 +753,26 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         break;
     }
 
+    /* curve */
+    switch(cmd) {
+    case CMD_INIT:
+        section->curve=NID_sect163r2;
+        break;
+    case CMD_EXEC:
+        if(strcasecmp(opt, "curve"))
+            break;
+        section->curve=OBJ_txt2nid(arg);
+        if(section->curve==NID_undef)
+            return "Curve name not supported";
+        return NULL; /* OK */
+    case CMD_DEFAULT:
+        s_log(LOG_NOTICE, "%-15s = %s", "curve", "sect163r2");
+        break;
+    case CMD_HELP:
+        s_log(LOG_NOTICE, "%-15s = ECDH curve name", "curve");
+        break;
+    }
+
     /* delay */
     switch(cmd) {
     case CMD_INIT:
@@ -779,7 +804,10 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "engineNum"))
             break;
-        section->engine=get_engine(atoi(arg));
+        tmpnum=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return "Illegal engine number";
+        section->engine=get_engine(tmpnum);
         if(!section->engine)
             return "Illegal engine number";
         return NULL; /* OK */
@@ -1153,9 +1181,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "session"))
             break;
-        if(atoi(arg)>0)
-            section->session_timeout=atoi(arg);
-        else
+        section->session_timeout=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal session timeout";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1202,9 +1229,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "stack"))
             break;
-        if(atoi(arg)>0)
-            section->stack_size=atoi(arg);
-        else
+        section->stack_size=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal thread stack size";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1219,38 +1245,89 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     /* sslVersion */
     switch(cmd) {
     case CMD_INIT:
-#ifdef USE_FIPS
+
+#if defined(USE_FIPS)
+
+#if !defined(OPENSSL_NO_TLS)
+#define DEFAULT_SSLVER_CLIENT "TLSv1"
+#define DEFAULT_SSLVER_SERVER "TLSv1"
         section->client_method=(SSL_METHOD *)TLSv1_client_method();
         section->server_method=(SSL_METHOD *)TLSv1_server_method();
-#else
+
+#else /* OPENSSL_NO_TLS */
+#error Need TLSv1 for FIPS mode
+#endif /* OPENSSL_NO_TLS */
+
+#else /* USE_FIPS */
+
+#if !defined(OPENSSL_NO_SSL3) && !defined(OPENSSL_NO_SSL2)
+#define DEFAULT_SSLVER_CLIENT "SSLv3"
+#define DEFAULT_SSLVER_SERVER "all"
         section->client_method=(SSL_METHOD *)SSLv3_client_method();
         section->server_method=(SSL_METHOD *)SSLv23_server_method();
-#endif
+
+#elif !defined(OPENSSL_NO_SSL3)
+#define DEFAULT_SSLVER_CLIENT "SSLv3"
+#define DEFAULT_SSLVER_SERVER "SSLv3"
+        section->client_method=(SSL_METHOD *)SSLv3_client_method();
+        section->server_method=(SSL_METHOD *)SSLv3_server_method();
+
+#elif !defined(OPENSSL_NO_TLS1)
+#define DEFAULT_SSLVER_CLIENT "TLSv1"
+#define DEFAULT_SSLVER_SERVER "TLSv1"
+        section->client_method=(SSL_METHOD *)TLSv1_client_method();
+        section->server_method=(SSL_METHOD *)TLSv1_server_method();
+
+#elif !defined(OPENSSL_NO_SSL2)
+#define DEFAULT_SSLVER_CLIENT "SSLv2"
+#define DEFAULT_SSLVER_SERVER "SSLv2"
+        section->client_method=(SSL_METHOD *)SSLv2_client_method();
+        section->server_method=(SSL_METHOD *)SSLv2_server_method();
+
+#else /* OPENSSL_NO_TLS1, OPENSSL_NO_SSL3, OPENSSL_NO_SSL2 */
+#error No supported SSL methods found
+#endif /* OPENSSL_NO_TLS1, OPENSSL_NO_SSL3, OPENSSL_NO_SSL2 */
+
+#endif /* USE_FIPS */
+
         break;
     case CMD_EXEC:
         if(strcasecmp(opt, "sslVersion"))
             break;
         if(!strcasecmp(arg, "all")) {
+#if !defined(OPENSSL_NO_SSL3) && !defined(OPENSSL_NO_SSL2)
             section->client_method=(SSL_METHOD *)SSLv23_client_method();
             section->server_method=(SSL_METHOD *)SSLv23_server_method();
+#else
+            return "SSLv23 not supported";
+#endif
         } else if(!strcasecmp(arg, "SSLv2")) {
+#if !defined(OPENSSL_NO_SSL2)
             section->client_method=(SSL_METHOD *)SSLv2_client_method();
             section->server_method=(SSL_METHOD *)SSLv2_server_method();
+#else
+            return "SSLv2 not supported";
+#endif
         } else if(!strcasecmp(arg, "SSLv3")) {
+#if !defined(OPENSSL_NO_SSL3)
             section->client_method=(SSL_METHOD *)SSLv3_client_method();
             section->server_method=(SSL_METHOD *)SSLv3_server_method();
+#else
+            return "SSLv3 not supported";
+#endif
         } else if(!strcasecmp(arg, "TLSv1")) {
+#if !defined(OPENSSL_NO_TLS1)
             section->client_method=(SSL_METHOD *)TLSv1_client_method();
             section->server_method=(SSL_METHOD *)TLSv1_server_method();
+#else
+            return "TLSv1 not supported";
+#endif
         } else
             return "Incorrect version of SSL protocol";
         return NULL; /* OK */
     case CMD_DEFAULT:
-#ifdef USE_FIPS
-        s_log(LOG_NOTICE, "%-15s = TLSv1", "sslVersion");
-#else
-        s_log(LOG_NOTICE, "%-15s = SSLv3 for client, all for server", "sslVersion");
-#endif
+        s_log(LOG_NOTICE, "%-15s = " DEFAULT_SSLVER_CLIENT " for client, "
+                DEFAULT_SSLVER_SERVER " for server", "sslVersion");
         break;
     case CMD_HELP:
         s_log(LOG_NOTICE, "%-15s = all|SSLv2|SSLv3|TLSv1 SSL method", "sslVersion");
@@ -1265,9 +1342,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "TIMEOUTbusy"))
             break;
-        if(atoi(arg)>0)
-            section->timeout_busy=atoi(arg);
-        else
+        section->timeout_busy=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal busy timeout";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1286,9 +1362,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "TIMEOUTclose"))
             break;
-        if(atoi(arg)>0 || !strcmp(arg, "0"))
-            section->timeout_close=atoi(arg);
-        else
+        section->timeout_close=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal close timeout";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1308,9 +1383,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "TIMEOUTconnect"))
             break;
-        if(atoi(arg)>0 || !strcmp(arg, "0"))
-            section->timeout_connect=atoi(arg);
-        else
+        section->timeout_connect=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal connect timeout";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1329,9 +1403,8 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     case CMD_EXEC:
         if(strcasecmp(opt, "TIMEOUTidle"))
             break;
-        if(atoi(arg)>0)
-            section->timeout_idle=atoi(arg);
-        else
+        section->timeout_idle=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
             return "Illegal idle timeout";
         return NULL; /* OK */
     case CMD_DEFAULT:
@@ -1377,7 +1450,10 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         if(strcasecmp(opt, "verify"))
             break;
         section->verify_level=SSL_VERIFY_NONE;
-        switch(atoi(arg)) {
+        tmpnum=strtol(arg, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return "Bad verify level";
+        switch(tmpnum) {
         case 3:
             section->verify_use_only_my=1;
         case 2:
@@ -1423,7 +1499,7 @@ void parse_commandline(char *name, char *parameter) {
     }
 
     if(!strcasecmp(name, "-version")) {
-        stunnel_info();
+        stunnel_info(LOG_NOTICE);
         s_log(LOG_NOTICE, " ");
         parse_global_option(CMD_DEFAULT, NULL, NULL, 0);
         parse_service_option(CMD_DEFAULT, NULL, NULL, NULL);
@@ -1439,22 +1515,20 @@ void parse_commandline(char *name, char *parameter) {
     if(!strcasecmp(name, "-fd")) {
         if(!parameter) {
             s_log(LOG_ERR, "No file descriptor specified");
-            syntax();
-            die(1);
+            syntax(CONF_FD);
         }
-        if(!parse_conf(parameter, CONF_FD))
-            die(1);
+        parse_conf(parameter, CONF_FD);
     } else
 #endif
-        if(!parse_conf(name, CONF_FILE))
-            die(1);
+        parse_conf(name, CONF_FILE);
 }
 
 /**************************************** parse configuration file */
 
-int parse_conf(char *name, CONF_TYPE type) {
+void parse_conf(char *name, CONF_TYPE type) {
     DISK_FILE *df;
-    char confline[CONFLINELEN], *arg, *opt, *errstr;
+    char line_text[CONFLINELEN], *errstr;
+    char config_line[CONFLINELEN], *config_opt, *config_arg;
     int line_number, i;
     SERVICE_OPTIONS *section, *new_section;
     static char *filename=NULL; /* a copy of config file name for reloading */
@@ -1462,7 +1536,8 @@ int parse_conf(char *name, CONF_TYPE type) {
     int sections=0;
 #endif
 #ifndef USE_WIN32
-    char *c;
+    int fd;
+    char *tmpstr;
 #endif
 
     if(name) /* not reload */
@@ -1472,23 +1547,18 @@ int parse_conf(char *name, CONF_TYPE type) {
         type==CONF_FD ? "descriptor" : "file", filename);
 #ifndef USE_WIN32
     if(type==CONF_FD) { /* file descriptor */
-        i=0; /* cannot use atoi() here due to insufficient error checking */
-        for(c=filename; *c; ++c) {
-            if(*c<'0' || *c>'9') {
-                s_log(LOG_ERR, "Invalid file descriptor number");
-                syntax();
-                return 0;
-            }
-            i=10*i+*c-'0';
+        fd=strtol(filename, &tmpstr, 10);
+        if(tmpstr==filename || *tmpstr) { /* not a number */
+            s_log(LOG_ERR, "Invalid file descriptor number");
+            syntax(type);
         }
-        df=file_fdopen(i);
+        df=file_fdopen(fd);
     } else
 #endif
         df=file_open(filename, 0);
     if(!df) {
         s_log(LOG_ERR, "Cannot read configuration");
-        syntax();
-        return 0;
+        syntax(type);
     }
 
     memset(&new_global_options, 0, sizeof(GLOBAL_OPTIONS)); /* reset global options */
@@ -1499,87 +1569,107 @@ int parse_conf(char *name, CONF_TYPE type) {
     parse_service_option(CMD_INIT, section, NULL, NULL);
 
     line_number=0;
-    while(file_getline(df, confline, CONFLINELEN)) {
+    while(file_getline(df, line_text, CONFLINELEN)>=0) {
+        memcpy(config_line, line_text, CONFLINELEN);
         ++line_number;
-        opt=confline;
-        while(isspace((unsigned char)*opt))
-            ++opt; /* remove initial whitespaces */
-        for(i=strlen(opt)-1; i>=0 && isspace((unsigned char)opt[i]); --i)
-            opt[i]='\0'; /* remove trailing whitespaces */
-        if(opt[0]=='\0' || opt[0]=='#' || opt[0]==';') /* empty or comment */
+        config_opt=config_line;
+        while(isspace((unsigned char)*config_opt))
+            ++config_opt; /* remove initial whitespaces */
+        for(i=strlen(config_opt)-1; i>=0 && isspace((unsigned char)config_opt[i]); --i)
+            config_opt[i]='\0'; /* remove trailing whitespaces */
+        if(config_opt[0]=='\0' || config_opt[0]=='#' || config_opt[0]==';') /* empty or comment */
             continue;
-        if(opt[0]=='[' && opt[strlen(opt)-1]==']') { /* new section */
-            if(!section_init(line_number, section, 0)) {
+        if(config_opt[0]=='[' && config_opt[strlen(config_opt)-1]==']') { /* new section */
+            if(!section_init(line_number, line_text, section, 0)) {
                 file_close(df);
-                return 0;
+                if(type==CONF_RELOAD)
+                    return;
+                die(1);
             }
-            ++opt;
-            opt[strlen(opt)-1]='\0';
+            ++config_opt;
+            config_opt[strlen(config_opt)-1]='\0';
             new_section=calloc(1, sizeof(SERVICE_OPTIONS));
             if(!new_section) {
                 s_log(LOG_ERR, "Fatal memory allocation error");
                 file_close(df);
-                return 0;
+                if(type==CONF_RELOAD)
+                    return;
+                die(1);
             }
             memcpy(new_section, &new_service_options, sizeof(SERVICE_OPTIONS));
-            new_section->servname=stralloc(opt);
+            new_section->servname=stralloc(config_opt);
             new_section->session=NULL;
             new_section->next=NULL;
             section->next=new_section;
             section=new_section;
 #ifdef MAX_FD
             if(++sections>MAX_FD) {
-                config_error(line_number, "Too many sections");
+                config_error(line_number, line_text, "Too many sections");
                 file_close(df);
-                return 0;
+                if(type==CONF_RELOAD)
+                    return;
+                die(1);
             }
 #endif
             continue;
         }
-        arg=strchr(confline, '=');
-        if(!arg) {
-            config_error(line_number, "No '=' found");
+        config_arg=strchr(config_line, '=');
+        if(!config_arg) {
+            config_error(line_number, line_text, "No '=' found");
             file_close(df);
-            return 0;
+            if(type==CONF_RELOAD)
+                return;
+            die(1);
         }
-        *arg++='\0'; /* split into option name and argument value */
-        for(i=strlen(opt)-1; i>=0 && isspace((unsigned char)opt[i]); --i)
-            opt[i]='\0'; /* remove trailing whitespaces */
-        while(isspace((unsigned char)*arg))
-            ++arg; /* remove initial whitespaces */
-        errstr=parse_service_option(CMD_EXEC, section, opt, arg);
+        *config_arg++='\0'; /* split into option name and argument value */
+        for(i=strlen(config_opt)-1; i>=0 && isspace((unsigned char)config_opt[i]); --i)
+            config_opt[i]='\0'; /* remove trailing whitespaces */
+        while(isspace((unsigned char)*config_arg))
+            ++config_arg; /* remove initial whitespaces */
+        errstr=parse_service_option(CMD_EXEC, section, config_opt, config_arg);
         if(section==&new_service_options && errstr==option_not_found)
-            errstr=parse_global_option(CMD_EXEC, opt, arg, type==CONF_RELOAD);
+            errstr=parse_global_option(CMD_EXEC, config_opt, config_arg, type==CONF_RELOAD);
         if(errstr) {
-            config_error(line_number, errstr);
+            config_error(line_number, line_text, errstr);
             file_close(df);
-            return 0;
+            if(type==CONF_RELOAD)
+                return;
+            die(1);
         }
-    }
-    if(!section_init(line_number, section, 1)) {
-        file_close(df);
-        return 0;
     }
     file_close(df);
+
+    /* initialize the last section */
+    if(!section_init(line_number, line_text, section, 1)) {
+        if(type==CONF_RELOAD)
+            return;
+        die(1);
+    }
+
+    /* final checks */
     if(!new_service_options.next) { /* inetd mode */
         if(section->option.accept) {
-            s_log(LOG_ERR, "accept option is not allowed in inetd mode");
-            s_log(LOG_ERR, "remove accept option or define a [section]");
-            return 0;
+            s_log(LOG_ERR, "Accept option is not allowed in inetd mode");
+            s_log(LOG_ERR, "Remove accept option or define a [section]");
+            if(type==CONF_RELOAD)
+                return;
+            die(1);
         }
         if(!section->option.remote && !section->execname) {
-            s_log(LOG_ERR, "inetd mode must have 'connect' or 'exec' options");
-            return 0;
+            s_log(LOG_ERR, "Inetd mode must have 'connect' or 'exec' options");
+            if(type==CONF_RELOAD)
+                return;
+            die(1);
         }
     }
     memcpy(&service_options, &new_service_options, sizeof(SERVICE_OPTIONS));
     s_log(LOG_NOTICE, "Configuration successful");
-    return 1;
 }
 
 /**************************************** validate and initialize section */
 
-static int section_init(int line_number, SERVICE_OPTIONS *section, int final) {
+static int section_init(int line_number, char *line_text,
+        SERVICE_OPTIONS *section, int final) {
     if(section==&new_service_options) { /* global options just configured */
         memcpy(&global_options, &new_global_options, sizeof(GLOBAL_OPTIONS));
 #ifdef HAVE_OSSL_ENGINE_H
@@ -1598,21 +1688,22 @@ static int section_init(int line_number, SERVICE_OPTIONS *section, int final) {
 
     if(section==&new_service_options) { /* inetd mode checks */
         if(section->option.accept) {
-            config_error(line_number, "accept is not allowed in inetd mode");
+            config_error(line_number, line_text,
+                "accept is not allowed in inetd mode");
             return 0;
         }
 #if 0
         /* TODO: some additional checks could be useful */
         if((unsigned int)section->option.program +
                 (unsigned int)section->option.remote != 1)
-            config_error(line_number,
+            config_error(line_number, line_text,
                 "Single endpoint is required in inetd mode");
 #endif
     } else { /* standalone mode checks */
         if((unsigned int)section->option.accept +
                 (unsigned int)section->option.program +
                 (unsigned int)section->option.remote != 2) {
-            config_error(line_number,
+            config_error(line_number, line_text,
                 "Each service section must define two endpoints");
             return 0;
         }
@@ -1882,7 +1973,7 @@ static void print_option(char *line, int type, OPT_UNION *val) {
 
 static int parse_socket_option(char *arg) {
     int socket_type; /* 0-accept, 1-local, 2-remote */
-    char *opt_val_str, *opt_val2_str;
+    char *opt_val_str, *opt_val2_str, *tmpstr;
     SOCK_OPT *ptr;
 
     if(arg[1]!=':')
@@ -1914,27 +2005,37 @@ static int parse_socket_option(char *arg) {
     switch(ptr->opt_type) {
     case TYPE_FLAG:
     case TYPE_INT:
-        ptr->opt_val[socket_type]->i_val=atoi(opt_val_str);
+        ptr->opt_val[socket_type]->i_val=strtol(opt_val_str, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return 0; /* FAILED */
         return 1; /* OK */
     case TYPE_LINGER:
         opt_val2_str=strchr(opt_val_str, ':');
         if(opt_val2_str) {
             *opt_val2_str++='\0';
-            ptr->opt_val[socket_type]->linger_val.l_linger=atoi(opt_val2_str);
+            ptr->opt_val[socket_type]->linger_val.l_linger=strtol(opt_val2_str, &tmpstr, 10);
+            if(tmpstr==arg || *tmpstr) /* not a number */
+                return 0; /* FAILED */
         } else {
             ptr->opt_val[socket_type]->linger_val.l_linger=0;
         }
-        ptr->opt_val[socket_type]->linger_val.l_onoff=atoi(opt_val_str);
+        ptr->opt_val[socket_type]->linger_val.l_onoff=strtol(opt_val_str, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return 0; /* FAILED */
         return 1; /* OK */
     case TYPE_TIMEVAL:
         opt_val2_str=strchr(opt_val_str, ':');
         if(opt_val2_str) {
             *opt_val2_str++='\0';
-            ptr->opt_val[socket_type]->timeval_val.tv_usec=atoi(opt_val2_str);
+            ptr->opt_val[socket_type]->timeval_val.tv_usec=strtol(opt_val2_str, &tmpstr, 10);
+            if(tmpstr==arg || *tmpstr) /* not a number */
+                return 0; /* FAILED */
         } else {
             ptr->opt_val[socket_type]->timeval_val.tv_usec=0;
         }
-        ptr->opt_val[socket_type]->timeval_val.tv_sec=atoi(opt_val_str);
+        ptr->opt_val[socket_type]->timeval_val.tv_sec=strtol(opt_val_str, &tmpstr, 10);
+        if(tmpstr==arg || *tmpstr) /* not a number */
+            return 0; /* FAILED */
         return 1; /* OK */
     case TYPE_STRING:
         if(strlen(opt_val_str)+1>sizeof(OPT_UNION))
@@ -1996,9 +2097,11 @@ static unsigned long parse_ocsp_flag(char *arg) {
     return 0; /* FAILED */
 }
 
-/**************************************** print syntax */
+/**************************************** fatal error */
 
-static void syntax(void) {
+static void syntax(CONF_TYPE type) {
+    if(type==CONF_RELOAD)
+        return; /* don't print syntax or die */
     s_log(LOG_NOTICE, " ");
     s_log(LOG_NOTICE, "Syntax:");
     s_log(LOG_NOTICE, "stunnel "
@@ -2026,23 +2129,23 @@ static void syntax(void) {
     s_log(LOG_NOTICE, "    -help       - get config file help");
     s_log(LOG_NOTICE, "    -version    - display version and defaults");
     s_log(LOG_NOTICE, "    -sockets    - display default socket options");
+    die(1);
 }
 
 /**************************************** various supporting funstions */
 
-static void config_error(int num, char *str) {
-    s_log(LOG_ERR, "line %d: %s", num, str);
+static void config_error(int num, char *line, char *str) {
+    s_log(LOG_ERR, "line %d: \"%s\": %s", num, line, str);
 }
 
-static char *stralloc(char *str) { /* allocate static string */
+static char *stralloc(char *str) { /* strdup() with error checking */
     char *retval;
 
-    retval=calloc(strlen(str)+1, 1);
+    retval=strdup(str);
     if(!retval) {
         s_log(LOG_ERR, "Fatal memory allocation error");
         die(2);
     }
-    strcpy(retval, str);
     return retval;
 }
 

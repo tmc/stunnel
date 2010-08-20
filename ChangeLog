@@ -1,5 +1,15 @@
 stunnel         Universal SSL tunnel
 
+Version 4.34, 2010.xx.xx, urgency: MEDIUM:
+* New features
+  - Updated Win32 DLLs for OpenSSL 1.0.0a.
+  - Updated Win32 DLLs for zlib 1.2.5.
+  - Added ECC support with a new service-level "curve" option.
+  - DH support is now enabled by default.
+  - Added support for OpenSSL builds with some algorithms disabled.
+* Bugfixes
+  - Implemented fixes in user interface to enter engine PIN.
+
 Version 4.33, 2010.04.05, urgency: MEDIUM:
 * New features
   - Win32 DLLs for OpenSSL 1.0.0.
@@ -8,7 +18,7 @@ Version 4.33, 2010.04.05, urgency: MEDIUM:
   - Experimental support for local mode on WIN32 platform.
     Try "exec = c:\windows\system32\cmd.exe".
 * Bugfixes
-  - Inetd mode fixed
+  - Inetd mode fixed.
 
 Version 4.32, 2010.03.24, urgency: MEDIUM:
 * New features

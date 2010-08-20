@@ -135,6 +135,7 @@ typedef struct service_options_struct {
     long session_timeout;
     int verify_level;
     int verify_use_only_my;
+    int curve;
     long ssl_options;
 #if SSLEAY_VERSION_NUMBER >= 0x00907000L
     SOCKADDR_LIST ocsp_addr;
@@ -228,7 +229,7 @@ typedef struct {
     struct pollfd ufds[MAX_FD];
     unsigned int nfds;
 #else
-    fd_set irfds, iwfds, orfds, owfds;
+    fd_set irfds, iwfds, iefds, orfds, owfds, oefds;
     int max;
 #endif
 } s_poll_set;
@@ -252,7 +253,7 @@ int bind_ports(void);
 #if !defined (USE_WIN32) && !defined (__vms) && !defined(USE_OS2)
 void drop_privileges(void);
 #endif
-void stunnel_info(void);
+void stunnel_info(int);
 void die(int);
 
 /**************************************** prototypes for log.c */
@@ -295,7 +296,7 @@ ENGINE *get_engine(int);
 /**************************************** prototypes for options.c */
 
 void parse_commandline(char *, char *);
-int parse_conf(char *, CONF_TYPE);
+void parse_conf(char *, CONF_TYPE);
 
 /**************************************** prototypes for ctx.c */
 
@@ -312,6 +313,7 @@ void s_poll_init(s_poll_set *);
 void s_poll_add(s_poll_set *, int, int, int);
 int s_poll_canread(s_poll_set *, int);
 int s_poll_canwrite(s_poll_set *, int);
+int s_poll_error(s_poll_set *, int);
 int s_poll_wait(s_poll_set *, int, int);
 
 #ifndef USE_WIN32
