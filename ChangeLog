@@ -7,8 +7,10 @@ Version 4.34, 2010.xx.xx, urgency: MEDIUM:
   - Added ECC support with a new service-level "curve" option.
   - DH support is now enabled by default.
   - Added support for OpenSSL builds with some algorithms disabled.
+  - stunnel.conf-sample.in modifiled to honor --sysconfdir and --localstatedir.
 * Bugfixes
   - Implemented fixes in user interface to enter engine PIN.
+  - Fixed a transfer() loop issue on received TCP RST packets.
 
 Version 4.33, 2010.04.05, urgency: MEDIUM:
 * New features

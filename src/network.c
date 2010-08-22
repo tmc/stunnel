@@ -90,7 +90,7 @@ int s_poll_canread(s_poll_set *fds, int fd) {
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
-            return fds->ufds[i].revents&POLLIN; /* read */
+            return fds->ufds[i].revents&(POLLIN|POLLHUP); /* read or closed */
     return 0;
 }
 
@@ -108,7 +108,7 @@ int s_poll_error(s_poll_set *fds, int fd) {
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
-            return fds->ufds[i].revents&POLLERR; /* error */
+            return fds->ufds[i].revents&(POLLERR|POLLNVAL); /* error */
     return 0;
 }
 
@@ -178,15 +178,15 @@ static void scan_waiting_queue(void) {
         for(i=0; i<context->fds->nfds; i++) {
             context->fds->ufds[i].revents=ufds[nfds].revents;
 #ifdef DEBUG_UCONTEXT
-            s_log(LOG_DEBUG, "CONTEXT %ld, FD=%d, (%s%s)->(%s%s%s%s%s)",
+            s_log(LOG_DEBUG, "CONTEXT %ld, FD=%d,%s%s ->%s%s%s%s%s",
                 context->id, ufds[nfds].fd,
-                ufds[nfds].events & POLLIN ? "IN" : "",
-                ufds[nfds].events & POLLOUT ? "OUT" : "",
-                ufds[nfds].revents & POLLIN ? "IN" : "",
-                ufds[nfds].revents & POLLOUT ? "OUT" : "",
-                ufds[nfds].revents & POLLERR ? "ERR" : "",
-                ufds[nfds].revents & POLLHUP ? "HUP" : "",
-                ufds[nfds].revents & POLLNVAL ? "NVAL" : "");
+                ufds[nfds].events & POLLIN ? " IN" : "",
+                ufds[nfds].events & POLLOUT ? " OUT" : "",
+                ufds[nfds].revents & POLLIN ? " IN" : "",
+                ufds[nfds].revents & POLLOUT ? " OUT" : "",
+                ufds[nfds].revents & POLLERR ? " ERR" : "",
+                ufds[nfds].revents & POLLHUP ? " HUP" : "",
+                ufds[nfds].revents & POLLNVAL ? " NVAL" : "");
 #endif
             if(ufds[nfds].revents)
                 context->ready++;

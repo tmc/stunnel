@@ -599,12 +599,9 @@ int passwd_cb(char *buf, int size, int rwflag, void *userdata) {
 
 #ifdef HAVE_OSSL_ENGINE_H
 int pin_cb(UI *ui, UI_STRING *uis) {
-    ui_data=UI_get_app_data(ui);
-    if (!ui_data) 
-        ui_data=UI_get0_user_data(ui);
-
+    ui_data=UI_get0_user_data(ui); /* was: ui_data=UI_get_app_data(ui); */
     if(!ui_data) {
-        s_log(LOG_ERR, "Broken OpenSSL engine failed to pass UI_DATA value");
+        s_log(LOG_ERR, "INTERNAL ERROR: user data data pointer");
         return 0;
     }
     if(!DialogBox(ghInst, TEXT("PassBox"), hwnd, (DLGPROC)pass_proc))

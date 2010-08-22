@@ -416,14 +416,17 @@ static void transfer(CLI *c) {
 
         /****************************** setup c->fds structure */
         s_poll_init(&c->fds); /* initialize the structure */
-        s_poll_add(&c->fds, c->sock_rfd->fd,
-            sock_open_rd && c->sock_ptr<BUFFSIZE, 0);
-        s_poll_add(&c->fds, c->ssl_rfd->fd,
-            read_wants_read || write_wants_read || shutdown_wants_read, 0);
-        s_poll_add(&c->fds, c->sock_wfd->fd,
-            0, sock_open_wr && c->ssl_ptr);
-        s_poll_add(&c->fds, c->ssl_wfd->fd,
-            0, read_wants_write || write_wants_write || shutdown_wants_write);
+        /* for plain socket open data strem = open file descriptor */
+        /* make sure to add each open socket to receive exceptions! */
+        if(sock_open_rd)
+            s_poll_add(&c->fds, c->sock_rfd->fd, c->sock_ptr<BUFFSIZE, 0);
+        if(sock_open_wr)
+            s_poll_add(&c->fds, c->sock_wfd->fd, 0, c->ssl_ptr);
+        /* for SSL assume that sockets are open if there any pending requests */
+        if(read_wants_read || write_wants_read || shutdown_wants_read)
+            s_poll_add(&c->fds, c->ssl_rfd->fd, 1, 0);
+        if(read_wants_write || write_wants_write || shutdown_wants_write)
+            s_poll_add(&c->fds, c->ssl_wfd->fd, 0, 1);
 
         /****************************** wait for an event */
         err=s_poll_wait(&c->fds, (sock_open_rd && ssl_open_rd) /* both peers open */ ||

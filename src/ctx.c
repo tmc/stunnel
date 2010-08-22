@@ -285,7 +285,7 @@ static int load_certificate(SERVICE_OPTIONS *section) {
     UI_DATA ui_data;
 #ifdef HAVE_OSSL_ENGINE_H
     EVP_PKEY *pkey;
-    UI_METHOD *uim;
+    UI_METHOD *ui_method;
 #endif
 
     ui_data.section=section; /* setup current section for callbacks */
@@ -302,17 +302,15 @@ static int load_certificate(SERVICE_OPTIONS *section) {
     SSL_CTX_set_default_passwd_cb(section->ctx, password_cb);
 #ifdef HAVE_OSSL_ENGINE_H
 #ifdef USE_WIN32
-    uim=UI_create_method("stunnel WIN32 UI");
-    UI_method_set_reader(uim, pin_cb);
-#else
-    uim=UI_OpenSSL();
-#endif
-#endif
-#ifdef HAVE_OSSL_ENGINE_H
+    ui_method=UI_create_method("stunnel WIN32 UI");
+    UI_method_set_reader(ui_method, pin_cb);
+#else /* USE_WIN32 */
+    ui_method=UI_OpenSSL();
+#endif /* USE_WIN32 */
     if(section->engine)
         for(i=1; i<=3; i++) {
             pkey=ENGINE_load_private_key(section->engine, section->key,
-                uim, &ui_data);
+                ui_method, &ui_data);
             if(!pkey) {
                 reason=ERR_GET_REASON(ERR_peek_error());
                 if(i<=2 && (reason==7 || reason==160)) { /* wrong PIN */
@@ -329,7 +327,7 @@ static int load_certificate(SERVICE_OPTIONS *section) {
             return 0;
         }
     else
-#endif
+#endif /* HAVE_OSSL_ENGINE_H */
         for(i=0; i<=3; i++) {
             if(!i && !cache_initialized)
                 continue; /* there is no cached value */
