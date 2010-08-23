@@ -229,7 +229,7 @@ typedef struct {
     struct pollfd ufds[MAX_FD];
     unsigned int nfds;
 #else
-    fd_set irfds, iwfds, iefds, orfds, owfds, oefds;
+    fd_set irfds, iwfds, orfds, owfds;
     int max;
 #endif
 } s_poll_set;

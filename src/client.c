@@ -445,30 +445,30 @@ static void transfer(CLI *c) {
             }
         }
 
-        /****************************** check for errors */
-        if(s_poll_error(&c->fds, c->sock_rfd->fd)) {
-            err=get_socket_error(c->sock_rfd->fd);
+        /****************************** check for errors on sockets */
+        err=s_poll_error(&c->fds, c->sock_rfd->fd);
+        if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on socket read file descriptor: %s (%d)",
                 my_strerror(err), err);
             longjmp(c->err, 1);
         }
-        if(s_poll_error(&c->fds, c->sock_wfd->fd)) {
-            err=get_socket_error(c->sock_wfd->fd);
+        err=s_poll_error(&c->fds, c->sock_wfd->fd);
+        if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on socket write file descriptor: %s (%d)",
                 my_strerror(err), err);
             longjmp(c->err, 1);
         }
-        if(s_poll_error(&c->fds, c->ssl_rfd->fd)) {
-            err=get_socket_error(c->ssl_rfd->fd);
+        err=s_poll_error(&c->fds, c->ssl_rfd->fd);
+        if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on SSL read file descriptor: %s (%d)",
                 my_strerror(err), err);
             longjmp(c->err, 1);
         }
-        if(s_poll_error(&c->fds, c->ssl_wfd->fd)) {
-            err=get_socket_error(c->ssl_wfd->fd);
+        err=s_poll_error(&c->fds, c->ssl_wfd->fd);
+        if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on SSL write file descriptor: %s (%d)",
                 my_strerror(err), err);
@@ -676,12 +676,12 @@ static void transfer(CLI *c) {
 
         /****************************** check write shutdown conditions */
         if(sock_open_wr && !ssl_open_rd && !c->ssl_ptr) {
-            s_log(LOG_DEBUG, "Socket write shutdown");
+            s_log(LOG_DEBUG, "Sending socket write shutdown");
             sock_open_wr=0; /* no further write allowed */
             shutdown(c->sock_wfd->fd, SHUT_WR); /* send TCP FIN */
         }
         if(ssl_open_wr && !sock_open_rd && !c->sock_ptr) {
-            s_log(LOG_DEBUG, "SSL write shutdown");
+            s_log(LOG_DEBUG, "Sending SSL write shutdown");
             ssl_open_wr=0; /* no further write allowed */
             if(strcmp(SSL_get_version(c->ssl), "SSLv2")) { /* SSLv3, TLSv1 */
                 shutdown_wants_write=1; /* initiate close_notify */
@@ -726,7 +726,7 @@ static void transfer(CLI *c) {
         }
 
     } while(sock_open_wr || ssl_open_wr ||
-            shutdown_wants_read || shutdown_wants_write);
+        shutdown_wants_read || shutdown_wants_write);
 }
 
 static void parse_socket_error(CLI *c, const char *text) {

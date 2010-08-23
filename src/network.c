@@ -99,7 +99,7 @@ int s_poll_canwrite(s_poll_set *fds, int fd) {
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
-            return fds->ufds[i].revents&POLLOUT; /* write */
+            return fds->ufds[i].revents&POLLOUT; /* it is possible to write */
     return 0;
 }
 
@@ -107,8 +107,11 @@ int s_poll_error(s_poll_set *fds, int fd) {
     int i;
 
     for(i=0; i<fds->nfds; i++)
-        if(fds->ufds[i].fd==fd)
-            return fds->ufds[i].revents&(POLLERR|POLLNVAL); /* error */
+        if(fds->ufds[i].fd==fd) {
+            if(!fds->ufds[i].revents&(POLLERR|POLLNVAL)) /* not an error */
+                return 0;
+            return get_socket_error(fd);
+        }
     return 0;
 }
 
@@ -300,7 +303,6 @@ void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
         FD_SET(fd, &fds->irfds);
     if(wr)
         FD_SET(fd, &fds->iwfds);
-    FD_SET(fd, &fds->iefds);
     if(fd>fds->max)
         fds->max=fd;
 }
@@ -314,7 +316,9 @@ int s_poll_canwrite(s_poll_set *fds, int fd) {
 }
 
 int s_poll_error(s_poll_set *fds, int fd) {
-    return FD_ISSET(fd, &fds->oefds);
+    if(!FD_ISSET(fd, &fds->orfds)) /* error conditions are signaled as read */
+        return 0;
+    return get_socket_error(fd); /* check if it's really an error */
 }
 
 int s_poll_wait(s_poll_set *fds, int sec, int msec) {
@@ -325,7 +329,6 @@ int s_poll_wait(s_poll_set *fds, int sec, int msec) {
         retry=0;
         memcpy(&fds->orfds, &fds->irfds, sizeof(fd_set));
         memcpy(&fds->owfds, &fds->iwfds, sizeof(fd_set));
-        memcpy(&fds->oefds, &fds->iefds, sizeof(fd_set));
         if(sec<0) { /* infinite timeout */
             tv_ptr=NULL;
         } else {
@@ -333,7 +336,7 @@ int s_poll_wait(s_poll_set *fds, int sec, int msec) {
             tv.tv_usec=1000*msec;
             tv_ptr=&tv;
         }
-        retval=select(fds->max+1, &fds->orfds, &fds->owfds, &fds->oefds, tv_ptr);
+        retval=select(fds->max+1, &fds->orfds, &fds->owfds, NULL, tv_ptr);
 #if !defined(USE_WIN32) && !defined(USE_OS2)
         if(sec<0 && retval>0 && s_poll_canread(fds, signal_pipe[0])) {
             signal_pipe_empty(); /* no timeout -> main loop */
