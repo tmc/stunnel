@@ -328,8 +328,6 @@ int get_socket_error(const int);
 
 typedef struct {
     int fd; /* file descriptor */
-    int rd; /* open for read */
-    int wr; /* open for write */
     int is_socket; /* file descriptor is a socket */
 } FD;
 

@@ -376,37 +376,23 @@ static void init_ssl(CLI *c) {
     }
 }
 
-/****************************** some defines for transfer() */
-/* is socket/SSL open for read/write? */
-#define sock_open_rd (c->sock_rfd->rd)
-#define sock_open_wr (c->sock_wfd->wr)
-#define ssl_open_rd  (c->ssl_rfd->rd)
-#define ssl_open_wr  (c->ssl_wfd->wr)
-/* NOTE: above defines are related to the logical data stream,
- * not the underlying file descriptors */
-
-/* is socket/SSL ready for read/write? */
-#define sock_can_rd (s_poll_canread(&c->fds, c->sock_rfd->fd))
-#define sock_can_wr (s_poll_canwrite(&c->fds, c->sock_wfd->fd))
-#define ssl_can_rd  (s_poll_canread(&c->fds, c->ssl_rfd->fd))
-#define ssl_can_wr  (s_poll_canwrite(&c->fds, c->ssl_wfd->fd))
-
 /****************************** transfer data */
 static void transfer(CLI *c) {
     int watchdog=0; /* a counter to detect an infinite loop */
-    int num, err, check_SSL_pending;
+    int num, err;
+    /* logical channels (not file descriptors!) open for read or write */
+    int sock_open_rd=1, sock_open_wr=1, ssl_open_rd=1, ssl_open_wr=1;
+    /* awaited conditions on SSL file descriptors */
     int shutdown_wants_read=0, shutdown_wants_write=0;
-    int write_wants_read=0, write_wants_write=0;
-    int read_wants_read=0, read_wants_write=0;
+    int read_wants_read, read_wants_write=0;
+    int write_wants_read=0, write_wants_write;
+    /* actual conditions on file descriptors */
+    int sock_can_rd, sock_can_wr, ssl_can_rd, ssl_can_wr;
 
     c->sock_ptr=c->ssl_ptr=0;
-    sock_open_rd=sock_open_wr=ssl_open_rd=ssl_open_wr=1;
 
-    do { /* main loop */
-        /* set flag to try and read any buffered SSL data
-         * if we made room in the buffer by writing to the socket */
-        check_SSL_pending=0;
-
+    do { /* main loop of client data transfer */
+        /****************************** initialize *_wants_* */
         read_wants_read=
             ssl_open_rd && c->ssl_ptr<BUFFSIZE && !read_wants_write;
         write_wants_write=
@@ -427,7 +413,8 @@ static void transfer(CLI *c) {
             s_poll_add(&c->fds, c->ssl_wfd->fd, 0, 1);
 
         /****************************** wait for an event */
-        err=s_poll_wait(&c->fds, (sock_open_rd && ssl_open_rd) /* both peers open */ ||
+        err=s_poll_wait(&c->fds,
+            (sock_open_rd && ssl_open_rd) /* both peers open */ ||
             c->ssl_ptr /* data buffered to write to socket */ ||
             c->sock_ptr /* data buffered to write to SSL */ ?
             c->opt->timeout_idle : c->opt->timeout_close, 0);
@@ -449,34 +436,44 @@ static void transfer(CLI *c) {
         err=s_poll_error(&c->fds, c->sock_rfd->fd);
         if(err) {
             s_log(LOG_NOTICE,
-                "Error detected on socket read file descriptor: %s (%d)",
+                "Error detected on socket (read) file descriptor: %s (%d)",
                 my_strerror(err), err);
             longjmp(c->err, 1);
         }
-        err=s_poll_error(&c->fds, c->sock_wfd->fd);
-        if(err) {
-            s_log(LOG_NOTICE,
-                "Error detected on socket write file descriptor: %s (%d)",
-                my_strerror(err), err);
-            longjmp(c->err, 1);
+        if(c->sock_wfd->fd != c->sock_rfd->fd) { /* performance optimization */
+            err=s_poll_error(&c->fds, c->sock_wfd->fd);
+            if(err) {
+                s_log(LOG_NOTICE,
+                    "Error detected on socket write file descriptor: %s (%d)",
+                    my_strerror(err), err);
+                longjmp(c->err, 1);
+            }
         }
         err=s_poll_error(&c->fds, c->ssl_rfd->fd);
         if(err) {
             s_log(LOG_NOTICE,
-                "Error detected on SSL read file descriptor: %s (%d)",
+                "Error detected on SSL (read) file descriptor: %s (%d)",
                 my_strerror(err), err);
             longjmp(c->err, 1);
         }
-        err=s_poll_error(&c->fds, c->ssl_wfd->fd);
-        if(err) {
-            s_log(LOG_NOTICE,
-                "Error detected on SSL write file descriptor: %s (%d)",
-                my_strerror(err), err);
-            longjmp(c->err, 1);
+        if(c->ssl_wfd->fd != c->ssl_rfd->fd) { /* performance optimization */
+            err=s_poll_error(&c->fds, c->ssl_wfd->fd);
+            if(err) {
+                s_log(LOG_NOTICE,
+                    "Error detected on SSL write file descriptor: %s (%d)",
+                    my_strerror(err), err);
+                longjmp(c->err, 1);
+            }
         }
 
+        /****************************** retrieve results from c->fds */
+        sock_can_rd=s_poll_canread(&c->fds, c->sock_rfd->fd);
+        sock_can_wr=s_poll_canwrite(&c->fds, c->sock_wfd->fd);
+        ssl_can_rd=s_poll_canread(&c->fds, c->ssl_rfd->fd);
+        ssl_can_wr=s_poll_canwrite(&c->fds, c->ssl_wfd->fd);
+
         /****************************** checks for internal failures */
-        /* please report any of these errors to stunnel-users mailing list */
+        /* please report any internal errors to stunnel-users mailing list */
         if(!(sock_can_rd || sock_can_wr || ssl_can_rd || ssl_can_wr)) {
             s_log(LOG_ERR, "INTERNAL ERROR: "
                 "s_poll_wait returned %d, but no descriptor is ready", err);
@@ -535,6 +532,24 @@ static void transfer(CLI *c) {
             }
         }
 
+        /****************************** read from socket */
+        if(sock_open_rd && sock_can_rd) {
+            num=readsocket(c->sock_rfd->fd,
+                c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr);
+            switch(num) {
+            case -1:
+                parse_socket_error(c, "readsocket");
+                break;
+            case 0: /* close */
+                s_log(LOG_DEBUG, "Socket closed on read");
+                sock_open_rd=0;
+                break;
+            default:
+                c->sock_ptr+=num;
+                watchdog=0; /* reset watchdog */
+            }
+        }
+
         /****************************** write to socket */
         if(sock_open_wr && sock_can_wr) {
             num=writesocket(c->sock_wfd->fd, c->ssl_buff, c->ssl_ptr);
@@ -547,11 +562,64 @@ static void transfer(CLI *c) {
                 break;
             default:
                 memmove(c->ssl_buff, c->ssl_buff+num, c->ssl_ptr-num);
-                if(c->ssl_ptr==BUFFSIZE) /* buffer was previously full */
-                    check_SSL_pending=1; /* check for data buffered by SSL */
                 c->ssl_ptr-=num;
                 c->sock_bytes+=num;
                 watchdog=0; /* reset watchdog */
+            }
+        }
+
+        /****************************** update *_wants_* based on new *_ptr */
+        read_wants_read=
+            ssl_open_rd && c->ssl_ptr<BUFFSIZE && !read_wants_write;
+        write_wants_write=
+            ssl_open_wr && c->sock_ptr && !write_wants_read;
+
+        /****************************** read from SSL */
+        if((read_wants_read && (ssl_can_rd || SSL_pending(c->ssl))) ||
+                (read_wants_write && ssl_can_wr)) {
+            read_wants_write=0;
+            num=SSL_read(c->ssl, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr);
+            switch(err=SSL_get_error(c->ssl, num)) {
+            case SSL_ERROR_NONE:
+                c->ssl_ptr+=num;
+                watchdog=0; /* reset watchdog */
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                s_log(LOG_DEBUG, "SSL_read returned WANT_WRITE: retrying");
+                read_wants_write=1;
+                break;
+            case SSL_ERROR_WANT_READ: /* nothing unexpected */
+                break;
+            case SSL_ERROR_WANT_X509_LOOKUP:
+                s_log(LOG_DEBUG,
+                    "SSL_read returned WANT_X509_LOOKUP: retrying");
+                break;
+            case SSL_ERROR_SYSCALL:
+                if(!num) { /* EOF */
+                    if(c->sock_ptr) {
+                        s_log(LOG_ERR,
+                            "SSL socket closed on SSL_read "
+                                "with %d byte(s) in buffer",
+                            c->sock_ptr);
+                        longjmp(c->err, 1); /* reset the socket */
+                    }
+                    s_log(LOG_DEBUG, "SSL socket closed on SSL_read");
+                    ssl_open_rd=ssl_open_wr=0; /* buggy peer: no close_notify */
+                } else
+                    parse_socket_error(c, "SSL_read");
+                break;
+            case SSL_ERROR_ZERO_RETURN: /* close_notify received */
+                s_log(LOG_DEBUG, "SSL closed on SSL_read");
+                ssl_open_rd=0;
+                if(!strcmp(SSL_get_version(c->ssl), "SSLv2"))
+                    ssl_open_wr=0;
+                break;
+            case SSL_ERROR_SSL:
+                sslerror("SSL_read");
+                longjmp(c->err, 1);
+            default:
+                s_log(LOG_ERR, "SSL_read/SSL_get_error returned %d", err);
+                longjmp(c->err, 1);
             }
         }
 
@@ -606,74 +674,6 @@ static void transfer(CLI *c) {
             }
         }
 
-        /****************************** read from socket */
-        if(sock_open_rd && sock_can_rd) {
-            num=readsocket(c->sock_rfd->fd,
-                c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr);
-            switch(num) {
-            case -1:
-                parse_socket_error(c, "readsocket");
-                break;
-            case 0: /* close */
-                s_log(LOG_DEBUG, "Socket closed on read");
-                sock_open_rd=0;
-                break;
-            default:
-                c->sock_ptr+=num;
-                watchdog=0; /* reset watchdog */
-            }
-        }
-
-        /****************************** read from SSL */
-        if((read_wants_read && ssl_can_rd) ||
-                (read_wants_write && ssl_can_wr) ||
-                (check_SSL_pending && SSL_pending(c->ssl))) {
-            read_wants_write=0;
-            num=SSL_read(c->ssl, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr);
-            switch(err=SSL_get_error(c->ssl, num)) {
-            case SSL_ERROR_NONE:
-                c->ssl_ptr+=num;
-                watchdog=0; /* reset watchdog */
-                break;
-            case SSL_ERROR_WANT_WRITE:
-                s_log(LOG_DEBUG, "SSL_read returned WANT_WRITE: retrying");
-                read_wants_write=1;
-                break;
-            case SSL_ERROR_WANT_READ: /* nothing unexpected */
-                break;
-            case SSL_ERROR_WANT_X509_LOOKUP:
-                s_log(LOG_DEBUG,
-                    "SSL_read returned WANT_X509_LOOKUP: retrying");
-                break;
-            case SSL_ERROR_SYSCALL:
-                if(!num) { /* EOF */
-                    if(c->sock_ptr) {
-                        s_log(LOG_ERR,
-                            "SSL socket closed on SSL_read "
-                                "with %d byte(s) in buffer",
-                            c->sock_ptr);
-                        longjmp(c->err, 1); /* reset the socket */
-                    }
-                    s_log(LOG_DEBUG, "SSL socket closed on SSL_read");
-                    ssl_open_rd=ssl_open_wr=0; /* buggy peer: no close_notify */
-                } else
-                    parse_socket_error(c, "SSL_read");
-                break;
-            case SSL_ERROR_ZERO_RETURN: /* close_notify received */
-                s_log(LOG_DEBUG, "SSL closed on SSL_read");
-                ssl_open_rd=0;
-                if(!strcmp(SSL_get_version(c->ssl), "SSLv2"))
-                    ssl_open_wr=0;
-                break;
-            case SSL_ERROR_SSL:
-                sslerror("SSL_read");
-                longjmp(c->err, 1);
-            default:
-                s_log(LOG_ERR, "SSL_read/SSL_get_error returned %d", err);
-                longjmp(c->err, 1);
-            }
-        }
-
         /****************************** check write shutdown conditions */
         if(sock_open_wr && !ssl_open_rd && !c->ssl_ptr) {
             s_log(LOG_DEBUG, "Sending socket write shutdown");
@@ -701,8 +701,8 @@ static void transfer(CLI *c) {
             s_log(LOG_ERR,
                 "please report the problem to Michal.Trojnara@mirt.net");
             stunnel_info(LOG_ERR);
-            s_log(LOG_ERR, "protocol=%s, check_SSL_pending=%s",
-                SSL_get_version(c->ssl), check_SSL_pending ? "Y" : "n");
+            s_log(LOG_ERR, "protocol=%s, SSL_pending=%d",
+                SSL_get_version(c->ssl), SSL_pending(c->ssl));
             s_log(LOG_ERR, "sock_open_rd=%s, sock_open_wr=%s, "
                 "ssl_open_rd=%s, ssl_open_wr=%s",
                 sock_open_rd ? "Y" : "n", sock_open_wr ? "Y" : "n",
