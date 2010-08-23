@@ -315,14 +315,14 @@ int s_poll_canread(s_poll_set *, int);
 int s_poll_canwrite(s_poll_set *, int);
 int s_poll_error(s_poll_set *, int);
 int s_poll_wait(s_poll_set *, int, int);
-
 #ifndef USE_WIN32
 int signal_pipe_init(void);
 void child_status(void);  /* dead libwrap or 'exec' process detected */
 #endif
 int set_socket_options(int, int);
 int alloc_fd(int);
-void setnonblock(int, unsigned long);
+void set_nonblock(int, unsigned long);
+int get_socket_error(const int);
 
 /**************************************** prototypes for client.c */
 

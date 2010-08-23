@@ -394,8 +394,6 @@ static void init_ssl(CLI *c) {
 /****************************** transfer data */
 static void transfer(CLI *c) {
     int watchdog=0; /* a counter to detect an infinite loop */
-    int error;
-    socklen_t optlen;
     int num, err, check_SSL_pending;
     int shutdown_wants_read=0, shutdown_wants_write=0;
     int write_wants_read=0, write_wants_write=0;
@@ -446,42 +444,61 @@ static void transfer(CLI *c) {
                 return; /* OK */
             }
         }
+
+        /****************************** check for errors */
         if(s_poll_error(&c->fds, c->sock_rfd->fd)) {
-            s_log(LOG_INFO, "Error detected on read socket");
+            err=get_socket_error(c->sock_rfd->fd);
+            s_log(LOG_NOTICE,
+                "Error detected on socket read file descriptor: %s (%d)",
+                my_strerror(err), err);
             longjmp(c->err, 1);
         }
         if(s_poll_error(&c->fds, c->sock_wfd->fd)) {
-            s_log(LOG_INFO, "Error detected on write socket");
+            err=get_socket_error(c->sock_wfd->fd);
+            s_log(LOG_NOTICE,
+                "Error detected on socket write file descriptor: %s (%d)",
+                my_strerror(err), err);
             longjmp(c->err, 1);
         }
         if(s_poll_error(&c->fds, c->ssl_rfd->fd)) {
-            s_log(LOG_INFO, "Error detected on read SSL");
+            err=get_socket_error(c->ssl_rfd->fd);
+            s_log(LOG_NOTICE,
+                "Error detected on SSL read file descriptor: %s (%d)",
+                my_strerror(err), err);
             longjmp(c->err, 1);
         }
         if(s_poll_error(&c->fds, c->ssl_wfd->fd)) {
-            s_log(LOG_INFO, "Error detected on write SSL");
+            err=get_socket_error(c->ssl_wfd->fd);
+            s_log(LOG_NOTICE,
+                "Error detected on SSL write file descriptor: %s (%d)",
+                my_strerror(err), err);
             longjmp(c->err, 1);
         }
+
+        /****************************** checks for internal failures */
+        /* please report any of these errors to stunnel-users mailing list */
         if(!(sock_can_rd || sock_can_wr || ssl_can_rd || ssl_can_wr)) {
             s_log(LOG_ERR, "INTERNAL ERROR: "
                 "s_poll_wait returned %d, but no descriptor is ready", err);
             longjmp(c->err, 1);
         }
+        /* these checks should no longer be needed */
+        /* I'm going to remove them in near future */
         if(!sock_open_rd && sock_can_rd) {
-            optlen=sizeof error;
-            if(getsockopt(c->sock_rfd->fd, SOL_SOCKET, SO_ERROR,
-                    (void *)&error, &optlen))
-                error=get_last_socket_error(); /* failed -> ask why */
-            if(error) { /* really an error? */
-                s_log(LOG_ERR, "Closed socket ready to read: %s (%d)",
-                    my_strerror(error), error);
+            err=get_socket_error(c->sock_rfd->fd);
+            if(err) { /* really an error? */
+                s_log(LOG_ERR, "INTERNAL ERROR: "
+                    "Closed socket ready to read: %s (%d)",
+                    my_strerror(err), err);
                 longjmp(c->err, 1);
             }
             if(c->ssl_ptr) { /* anything left to write */
-                s_log(LOG_ERR, "Closed socket ready to read - reset");
+                s_log(LOG_ERR, "INTERNAL ERROR: "
+                    "Closed socket ready to read: reset");
                 longjmp(c->err, 1);
             }
-            s_log(LOG_INFO, "Closed socket ready to read - write close");
+            s_log(LOG_ERR, "INTERNAL ERROR: "
+                "Closed socket ready to read: write close");
             sock_open_wr=0; /* no further write allowed */
             shutdown(c->sock_wfd->fd, SHUT_WR); /* send TCP FIN */
         }

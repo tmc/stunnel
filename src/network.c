@@ -503,7 +503,7 @@ int alloc_fd(int sock) {
         closesocket(sock);
         return -1;
     }
-    setnonblock(sock, 1);
+    set_nonblock(sock, 1);
     return 0;
 }
 
@@ -512,7 +512,7 @@ int alloc_fd(int sock) {
 #define O_NONBLOCK O_NDELAY
 #endif
 
-void setnonblock(int sock, unsigned long l) {
+void set_nonblock(int sock, unsigned long l) {
 #if defined F_GETFL && defined F_SETFL && defined O_NONBLOCK && !defined __INNOTEK_LIBC__
     int retval, flags;
     do {
@@ -563,11 +563,19 @@ int set_socket_options(int s, int type) {
     return 0; /* OK */
 }
 
+int get_socket_error(const int fd) {
+    int err;
+    socklen_t optlen=sizeof err;
+
+    if(getsockopt(fd, SOL_SOCKET, SO_ERROR, (void *)&err, &optlen))
+        return get_last_socket_error(); /* failed -> ask why */
+    return err;
+}
+
 /**************************************** simulate blocking I/O */
 
 int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
     int error;
-    socklen_t optlen;
     char dst[IPLEN];
 
     s_ntop(dst, addr);
@@ -601,10 +609,7 @@ int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
         if(s_poll_canread(&c->fds, c->fd) || s_poll_error(&c->fds, c->fd)) {
             /* newly connected socket should not be ready for read */
             /* get the resulting error code, now */
-            optlen=sizeof error;
-            if(getsockopt(c->fd, SOL_SOCKET, SO_ERROR,
-                    (void *)&error, &optlen))
-                error=get_last_socket_error(); /* failed -> ask why */
+            error=get_socket_error(c->fd);
             if(error) { /* really an error? */
                 s_log(LOG_ERR, "connect_blocking: getsockopt %s: %s (%d)",
                     dst, my_strerror(error), error);

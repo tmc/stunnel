@@ -384,9 +384,9 @@ static int ocsp_check(CLI *c, X509_STORE_CTX *callback_ctx,
     /* FIXME: this code won't work with ucontext threading */
     /* (blocking sockets are used) */
     bio=BIO_new_fd(c->fd, BIO_NOCLOSE);
-    setnonblock(c->fd, 0);
+    set_nonblock(c->fd, 0);
     response=OCSP_sendreq_bio(bio, c->opt->ocsp_path, request);
-    setnonblock(c->fd, 1);
+    set_nonblock(c->fd, 1);
     if(!response) {
         sslerror("OCSP_sendreq_bio");
         goto cleanup;
