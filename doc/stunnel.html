@@ -399,6 +399,24 @@ be named XXXXXXXX.0 where XXXXXXXX is the hash value of the CRL.</p>
 <p>Certificate Revocation Lists file</p>
 <p>This file contains multiple CRLs, used with the <em>verify</em>.</p>
 </dd>
+<dt><strong><a name="selector" class="item"><strong>cryptoapicert</strong> selector (WIN32 only)</a></strong></dt>
+
+<dd>
+<p>Load the certificate and private key from the Windows Certificate System Store.
+Use this option instead of <strong>cert</strong> and <strong>key</strong>.</p>
+<p><strong>cryptoapicert</strong> makes it possible to use any smart card supported by Windows, but
+also any certificate that includes its private key.</p>
+<p>Selector formats:</p>
+<pre>
+    SUBJ:&lt;certificate substring to match&gt;
+    THUMB:&lt;certificate thumbprint hex value&gt;</pre>
+<p>The thumbprint hex string can easily be retrieved (copy-paste) from the Windows
+Certificate Store GUI.</p>
+<p>Examples:</p>
+<pre>
+    cryptoapicert = SUBJ:Peter Runestig
+    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28</pre>
+</dd>
 <dt><strong><a name="curve_nid" class="item"><strong>curve</strong> = nid</a></strong></dt>
 
 <dd>
@@ -825,11 +843,6 @@ OpenSSLs.</p>
 
 <dd>
 <p><strong>stunnel</strong> configuration file</p>
-</dd>
-<dt><strong><a name="stunnel_pem" class="item"><em class="file">stunnel.pem</em></a></strong></dt>
-
-<dd>
-<p><strong>stunnel</strong> certificate and private key</p>
 </dd>
 </dl>
 <p>

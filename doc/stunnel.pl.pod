@@ -374,6 +374,28 @@ plik List Odwo³anych Certyfikatów (CRL)
 Opcja pozwala okre¶liæ po³o¿enie pliku zawieraj±cego listy CRL u¿ywane
 przez opcjê I<verify>.
 
+=item B<cryptoapicert> selektor (WIN32 only)
+
+Opcja pozwala odczytaæ certyfikat i odpowiadaj±cy mu klucz prywatny z Windows
+Certificate System Store.
+Mo¿na jej u¿ywaæ zamiast B<cert> i B<key>.
+
+Opcja pozwala na u¿ywanie dowolnej karty inteligentnej wspieranej przez
+Windows jak równie¿ dowolnego certyfikatu zawieraj±cego klucz prywatny.
+
+Formaty selektora:
+
+    SUBJ:<podci±g do którego dopasowany bêdzie posiadacz (podmiot) certyfikatu>
+    THUMB:<szesnastkowy skrót kryptograficzny certyfikatu>
+
+Skrót kryptograficzny certyfikatu mo¿e byæ ³atwo uzyskany (skopiuj-wklej) z GUI
+Windows Certificate Store.
+
+Examples:
+
+    cryptoapicert = SUBJ:Peter Runestig
+    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28
+
 =item B<curve> = nid
 
 krzywa dla ECDH
@@ -821,10 +843,6 @@ I<stunnel>.
 =item F<stunnel.conf>
 
 plik konfiguracyjny programu
-
-=item F<stunnel.pem>
-
-certyfikat i klucz prywatny
 
 =back
 

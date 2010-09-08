@@ -107,11 +107,9 @@ int s_poll_error(s_poll_set *fds, int fd) {
     int i;
 
     for(i=0; i<fds->nfds; i++)
-        if(fds->ufds[i].fd==fd) {
-            if(!fds->ufds[i].revents&(POLLERR|POLLNVAL)) /* not an error */
-                return 0;
-            return get_socket_error(fd);
-        }
+        if(fds->ufds[i].fd==fd)
+            return fds->ufds[i].revents&(POLLERR|POLLNVAL) ?
+                get_socket_error(fd) : 0;
     return 0;
 }
 

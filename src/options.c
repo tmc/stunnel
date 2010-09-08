@@ -50,7 +50,7 @@
 
 #define CONFLINELEN (16*1024)
 
-static int section_init(int, char *, SERVICE_OPTIONS *, int);
+static int section_init(int, SERVICE_OPTIONS *, int);
 
 static int parse_debug_level(char *);
 static int parse_ssl_option(char *);
@@ -61,7 +61,8 @@ static char *parse_ocsp_url(SERVICE_OPTIONS *, char *);
 static unsigned long parse_ocsp_flag(char *);
 
 static void syntax(CONF_TYPE);
-static void config_error(int, char *, char *);
+static void config_error(int, const char *, const char *);
+static void section_error(int, const char *);
 static char *stralloc(char *);
 #ifndef USE_WIN32
 static char **argalloc(char *);
@@ -617,17 +618,12 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
     /* cert */
     switch(cmd) {
     case CMD_INIT:
-#ifdef CONFDIR
-        section->cert=CONFDIR CONFSEPARATOR "stunnel.pem";
-#else
-        section->cert="stunnel.pem";
-#endif
+        section->cert=NULL;
         break;
     case CMD_EXEC:
         if(strcasecmp(opt, "cert"))
             break;
         section->cert=stralloc(arg);
-        section->option.cert=1;
         return NULL; /* OK */
     case CMD_DEFAULT:
 #ifdef CONFDIR
@@ -752,6 +748,25 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         s_log(LOG_NOTICE, "%-15s = CRL file", "CRLfile");
         break;
     }
+
+    /* cryptoapicert */
+#ifdef USE_WIN32
+    switch(cmd) {
+    case CMD_INIT:
+        section->cryptoapi_cert=NULL;
+        break;
+    case CMD_EXEC:
+        if(strcasecmp(opt, "cryptoapicert"))
+            break;
+        section->cryptoapi_cert=stralloc(arg);
+        return NULL; /* OK */
+    case CMD_DEFAULT:
+        break;
+    case CMD_HELP:
+        s_log(LOG_NOTICE, "%-15s = certificate selector", "cryptoapicert");
+        break;
+    }
+#endif
 
     /* curve */
     switch(cmd) {
@@ -1567,6 +1582,10 @@ void parse_conf(char *name, CONF_TYPE type) {
     section=&new_service_options;
     parse_global_option(CMD_INIT, NULL, NULL, type==CONF_RELOAD);
     parse_service_option(CMD_INIT, section, NULL, NULL);
+    if(type!=CONF_RELOAD) { /* provide defaults for gui.c */
+        memcpy(&global_options, &new_global_options, sizeof(GLOBAL_OPTIONS));
+        memcpy(&service_options, &new_service_options, sizeof(SERVICE_OPTIONS));
+    }
 
     line_number=0;
     while(file_getline(df, line_text, CONFLINELEN)>=0) {
@@ -1580,7 +1599,7 @@ void parse_conf(char *name, CONF_TYPE type) {
         if(config_opt[0]=='\0' || config_opt[0]=='#' || config_opt[0]==';') /* empty or comment */
             continue;
         if(config_opt[0]=='[' && config_opt[strlen(config_opt)-1]==']') { /* new section */
-            if(!section_init(line_number, line_text, section, 0)) {
+            if(!section_init(line_number-1, section, 0)) {
                 file_close(df);
                 if(type==CONF_RELOAD)
                     return;
@@ -1640,7 +1659,7 @@ void parse_conf(char *name, CONF_TYPE type) {
     file_close(df);
 
     /* initialize the last section */
-    if(!section_init(line_number, line_text, section, 1)) {
+    if(!section_init(line_number-1, section, 1)) {
         if(type==CONF_RELOAD)
             return;
         die(1);
@@ -1668,8 +1687,7 @@ void parse_conf(char *name, CONF_TYPE type) {
 
 /**************************************** validate and initialize section */
 
-static int section_init(int line_number, char *line_text,
-        SERVICE_OPTIONS *section, int final) {
+static int section_init(int prev_line, SERVICE_OPTIONS *section, int final) {
     if(section==&new_service_options) { /* global options just configured */
         memcpy(&global_options, &new_global_options, sizeof(GLOBAL_OPTIONS));
 #ifdef HAVE_OSSL_ENGINE_H
@@ -1681,30 +1699,34 @@ static int section_init(int line_number, char *line_text,
             return 1; /* OK */
     }
 
-    if(!section->option.client)
-        section->option.cert=1; /* server always needs a certificate */
+    if(!section->option.client && !section->cert
+#ifdef USE_WIN32
+            && !section->cryptoapi_cert
+#endif
+            ) {
+        section_error(prev_line, "SSL server needs a certificate");
+        return 0;
+    }
     if(!context_init(section)) /* initialize SSL context */
         return 0;
 
     if(section==&new_service_options) { /* inetd mode checks */
         if(section->option.accept) {
-            config_error(line_number, line_text,
-                "accept is not allowed in inetd mode");
+            section_error(prev_line, "'accept' is not allowed in inetd mode");
             return 0;
         }
 #if 0
         /* TODO: some additional checks could be useful */
         if((unsigned int)section->option.program +
                 (unsigned int)section->option.remote != 1)
-            config_error(line_number, line_text,
+            section_error(prev_line,
                 "Single endpoint is required in inetd mode");
 #endif
     } else { /* standalone mode checks */
         if((unsigned int)section->option.accept +
                 (unsigned int)section->option.program +
                 (unsigned int)section->option.remote != 2) {
-            config_error(line_number, line_text,
-                "Each service section must define two endpoints");
+            section_error(prev_line, "Each service must define two endpoints");
             return 0;
         }
     }
@@ -2134,8 +2156,12 @@ static void syntax(CONF_TYPE type) {
 
 /**************************************** various supporting funstions */
 
-static void config_error(int num, char *line, char *str) {
-    s_log(LOG_ERR, "line %d: \"%s\": %s", num, line, str);
+static void config_error(int num, const char *line, const char *str) {
+    s_log(LOG_ERR, "Line %d: \"%s\": %s", num, line, str);
+}
+
+static void section_error(int num, const char *str) {
+    s_log(LOG_ERR, "Line %d (end of section): %s", num, str);
 }
 
 static char *stralloc(char *str) { /* strdup() with error checking */

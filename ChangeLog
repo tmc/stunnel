@@ -4,13 +4,16 @@ Version 4.34, 2010.xx.xx, urgency: MEDIUM:
 * New features
   - Updated Win32 DLLs for OpenSSL 1.0.0a.
   - Updated Win32 DLLs for zlib 1.2.5.
+  - Updated automake to version 1.11.1
+  - Updated libtool to version 2.2.6b
   - Added ECC support with a new service-level "curve" option.
   - DH support is now enabled by default.
   - Added support for OpenSSL builds with some algorithms disabled.
-  - stunnel.conf-sample.in modifiled to honor --sysconfdir and --localstatedir.
+  - ./configure modified to support cross-compilation.
 * Bugfixes
   - Implemented fixes in user interface to enter engine PIN.
-  - Fixed a transfer() loop issue on received TCP RST packets.
+  - Fixed a transfer() loop issue on socket errors.
+  - Fixed missing WIN32 taskbar icon while displaying a global option error.
 
 Version 4.33, 2010.04.05, urgency: MEDIUM:
 * New features

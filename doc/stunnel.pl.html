@@ -420,6 +420,25 @@ wzglêdem tego katalogu.</p>
 <p>Opcja pozwala okre¶liæ po³o¿enie pliku zawieraj±cego listy CRL u¿ywane
 przez opcjê <em>verify</em>.</p>
 </dd>
+<dt><strong><a name="selektor" class="item"><strong>cryptoapicert</strong> selektor (WIN32 only)</a></strong></dt>
+
+<dd>
+<p>Opcja pozwala odczytaæ certyfikat i odpowiadaj±cy mu klucz prywatny z Windows
+Certificate System Store.
+Mo¿na jej u¿ywaæ zamiast <strong>cert</strong> i <strong>key</strong>.</p>
+<p>Opcja pozwala na u¿ywanie dowolnej karty inteligentnej wspieranej przez
+Windows jak równie¿ dowolnego certyfikatu zawieraj±cego klucz prywatny.</p>
+<p>Formaty selektora:</p>
+<pre>
+    SUBJ:&lt;podci±g do którego dopasowany bêdzie posiadacz (podmiot) certyfikatu&gt;
+    THUMB:&lt;szesnastkowy skrót kryptograficzny certyfikatu&gt;</pre>
+<p>Skrót kryptograficzny certyfikatu mo¿e byæ ³atwo uzyskany (skopiuj-wklej) z GUI
+Windows Certificate Store.</p>
+<p>Examples:</p>
+<pre>
+    cryptoapicert = SUBJ:Peter Runestig
+    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28</pre>
+</dd>
 <dt><strong><a name="curve_nid" class="item"><strong>curve</strong> = nid</a></strong></dt>
 
 <dd>
@@ -867,11 +886,6 @@ powy¿szej listy.  Jest to w³a¶ciwo¶æ biblioteki <em>OpenSSL</em>, a nie programu
 
 <dd>
 <p>plik konfiguracyjny programu</p>
-</dd>
-<dt><strong><a name="stunnel_pem" class="item"><em class="file">stunnel.pem</em></a></strong></dt>
-
-<dd>
-<p>certyfikat i klucz prywatny</p>
 </dd>
 </dl>
 <p>

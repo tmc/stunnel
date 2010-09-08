@@ -16,9 +16,9 @@ CC=gcc
 CFLAGS=-g -O2 -Wall $(DEFINES) -I$(SSLDIR)/outinc
 LDFLAGS=-s
 
-# LIBS=-L$(SSLDIR)/out -lssl -lcrypto -lwsock32 -lgdi32
+# LIBS=-L$(SSLDIR)/out -lssl -lcrypto -lwsock32 -lgdi32 -lcrypt32
 
-LIBS=-L$(SSLDIR)/out -lzdll -leay32 -lssl32 -lwsock32 -lgdi32
+LIBS=-L$(SSLDIR)/out -lzdll -leay32 -lssl32 -lwsock32 -lgdi32 -lcrypt32
 OBJS=stunnel.o ssl.o ctx.o verify.o file.o client.o protocol.o sthreads.o log.o options.o network.o resolver.o gui.o resources.o
 
 stunnel.exe: $(OBJS)

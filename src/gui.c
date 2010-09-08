@@ -122,8 +122,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     LPSTR command_line;
 
-    /* system("c:\\start.bat"); */
-
 #ifdef _WIN32_WCE
     command_line=tstr2str(lpCmdLine);
 #else

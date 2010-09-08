@@ -132,6 +132,9 @@ typedef struct service_options_struct {
     char *cipher_list;
     char *cert;                                             /* cert filename */
     char *key;                               /* pem (priv key/cert) filename */
+#ifdef USE_WIN32
+    char *cryptoapi_cert;                 /* Microsoft CryptoAPI certificate */
+#endif
     long session_timeout;
     int verify_level;
     int verify_use_only_my;
@@ -171,7 +174,6 @@ typedef struct service_options_struct {
 
         /* on/off switches */
     struct {
-        unsigned int cert:1;
         unsigned int client:1;
         unsigned int delayed_lookup:1;
         unsigned int accept:1;
@@ -291,6 +293,11 @@ char *open_engine(const char *);
 char *ctrl_engine(const char *, const char *);
 void close_engine(void);
 ENGINE *get_engine(int);
+#endif
+
+/**************************************** prototypes for cryptoapi.c */
+#ifdef USE_WIN32
+int SSL_CTX_use_CryptoAPI_certificate(SSL_CTX *, const char *);
 #endif
 
 /**************************************** prototypes for options.c */

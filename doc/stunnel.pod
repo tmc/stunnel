@@ -356,6 +356,27 @@ Certificate Revocation Lists file
 
 This file contains multiple CRLs, used with the I<verify>.
 
+=item B<cryptoapicert> selector (WIN32 only)
+
+Load the certificate and private key from the Windows Certificate System Store.
+Use this option instead of B<cert> and B<key>.
+
+B<cryptoapicert> makes it possible to use any smart card supported by Windows, but
+also any certificate that includes its private key.
+
+Selector formats:
+
+    SUBJ:<certificate substring to match>
+    THUMB:<certificate thumbprint hex value>
+
+The thumbprint hex string can easily be retrieved (copy-paste) from the Windows
+Certificate Store GUI.
+
+Examples:
+
+    cryptoapicert = SUBJ:Peter Runestig
+    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28
+
 =item B<curve> = nid
 
 specify ECDH curve name
@@ -782,10 +803,6 @@ OpenSSLs.
 =item F<stunnel.conf>
 
 B<stunnel> configuration file
-
-=item F<stunnel.pem>
-
-B<stunnel> certificate and private key
 
 =back
 

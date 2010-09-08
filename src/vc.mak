@@ -20,8 +20,8 @@ LINK=link
 LDFLAGS=/INCREMENTAL:NO /NOLOGO /SUBSYSTEM:WINDOWS /OPT:REF \
 	/OPT:ICF /LTCG /MACHINE:X86 /ERRORREPORT:PROMPT
 LIBS=/LIBPATH:"$(SSLDIR)\out32dll" wsock32.lib ssleay32.lib \
-	libeay32.lib user32.lib gdi32.lib shell32.lib comdlg32.lib \
-	advapi32.lib
+	libeay32.lib user32.lib gdi32.lib crypt32 shell32.lib \
+	comdlg32.lib advapi32.lib
 
 all: stunnel.exe
 

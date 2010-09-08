@@ -60,7 +60,7 @@ static int init_ecdh(SSL_CTX *, SERVICE_OPTIONS *);
 #endif /* USE_ECDH */
 
 /* loading certificate */
-static int load_certificate(SERVICE_OPTIONS *);
+static int load_pem_cert(SERVICE_OPTIONS *);
 static int password_cb(char *, int, int, void *);
 
 /* session cache callbacks */
@@ -93,7 +93,7 @@ int context_init(SERVICE_OPTIONS *section) { /* init SSL context */
 #ifdef HAVE_OSSL_ENGINE_H
     if(!section->engine)
 #endif
-    if(section->option.cert) {
+    if(section->key) {
         if(stat(section->key, &st)) {
             ioerror(section->key);
             return 0;
@@ -151,9 +151,19 @@ int context_init(SERVICE_OPTIONS *section) { /* init SSL context */
     SSL_CTX_set_info_callback(section->ctx, info_callback);
 
     /* initialize certificate verification */
-    if(section->option.cert)
-        if(!load_certificate(section))
+#ifdef USE_WIN32
+    if(section->cryptoapi_cert) {
+        s_log(LOG_DEBUG, "Microsoft Certificate Store certificate: %s",
+            section->cryptoapi_cert);
+        if(!SSL_CTX_use_CryptoAPI_certificate(section->ctx,
+            section->cryptoapi_cert)) {
+            sslerror("SSL_CTX_use_CryptoAPI_certificate");
             return 0;
+        }
+    } else
+#endif
+    if(!load_pem_cert(section))
+        return 0;
     if(!verify_init(section))
         return 0;
 
@@ -235,6 +245,10 @@ static int init_dh(SSL_CTX *ctx, SERVICE_OPTIONS *section) {
     DH *dh;
     BIO *bio;
 
+    if(!section->cert) {
+        s_log(LOG_INFO, "No certificate available to load DH parameters");
+        return 0; /* FAILED */
+    }
     bio=BIO_new_file(section->cert, "r");
     if(!bio) {
         sslerror("BIO_new_file");
@@ -244,7 +258,7 @@ static int init_dh(SSL_CTX *ctx, SERVICE_OPTIONS *section) {
     BIO_free(bio);
     if(!dh) {
         while(ERR_get_error())
-            ; /* cleanup the OpenSSL error queue */
+            ; /* OpenSSL error queue cleanup */
         s_log(LOG_INFO, "Could not load DH parameters from %s",
             section->cert);
         return 0; /* FAILED */
@@ -280,13 +294,16 @@ static int init_ecdh(SSL_CTX *ctx, SERVICE_OPTIONS *section) {
 
 static int cache_initialized=0;
 
-static int load_certificate(SERVICE_OPTIONS *section) {
+static int load_pem_cert(SERVICE_OPTIONS *section) {
     int i, reason;
     UI_DATA ui_data;
 #ifdef HAVE_OSSL_ENGINE_H
     EVP_PKEY *pkey;
     UI_METHOD *ui_method;
 #endif
+
+    if(!section->cert) /* no certificate specified */
+        return 1; /* OK */
 
     ui_data.section=section; /* setup current section for callbacks */
 

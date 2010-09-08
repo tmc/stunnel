@@ -480,7 +480,7 @@ static void transfer(CLI *c) {
             longjmp(c->err, 1);
         }
         /* these checks should no longer be needed */
-        /* I'm going to remove them in near future */
+        /* I'm going to remove them soon */
         if(!sock_open_rd && sock_can_rd) {
             err=get_socket_error(c->sock_rfd->fd);
             if(err) { /* really an error? */
@@ -569,6 +569,7 @@ static void transfer(CLI *c) {
         }
 
         /****************************** update *_wants_* based on new *_ptr */
+        /* this update is also required for SSL_pending() to be used */
         read_wants_read=
             ssl_open_rd && c->ssl_ptr<BUFFSIZE && !read_wants_write;
         write_wants_write=
@@ -576,6 +577,8 @@ static void transfer(CLI *c) {
 
         /****************************** read from SSL */
         if((read_wants_read && (ssl_can_rd || SSL_pending(c->ssl))) ||
+                /* it may be possible to read some pending data after
+                 * writesocket() above made some room in c->ssl_buff */
                 (read_wants_write && ssl_can_wr)) {
             read_wants_write=0;
             num=SSL_read(c->ssl, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr);
