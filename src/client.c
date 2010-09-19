@@ -51,10 +51,8 @@
 #define SHUT_RDWR 2
 #endif
 
-#if SSLEAY_VERSION_NUMBER >= 0x0922
 static char *sid_ctx="stunnel SID";
     /* const allowed here */
-#endif
 
 static void do_client(CLI *);
 static void run_client(CLI *);
@@ -279,10 +277,8 @@ static void init_ssl(CLI *c) {
         longjmp(c->err, 1);
     }
     SSL_set_ex_data(c->ssl, cli_index, c); /* for callbacks */
-#if SSLEAY_VERSION_NUMBER >= 0x0922
     SSL_set_session_id_context(c->ssl, (unsigned char *)sid_ctx,
         strlen(sid_ctx));
-#endif
     if(c->opt->option.client) {
         if(c->opt->session) {
             enter_critical_section(CRIT_SESSION);
@@ -437,7 +433,7 @@ static void transfer(CLI *c) {
         if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on socket (read) file descriptor: %s (%d)",
-                my_strerror(err), err);
+                s_strerror(err), err);
             longjmp(c->err, 1);
         }
         if(c->sock_wfd->fd != c->sock_rfd->fd) { /* performance optimization */
@@ -445,7 +441,7 @@ static void transfer(CLI *c) {
             if(err) {
                 s_log(LOG_NOTICE,
                     "Error detected on socket write file descriptor: %s (%d)",
-                    my_strerror(err), err);
+                    s_strerror(err), err);
                 longjmp(c->err, 1);
             }
         }
@@ -453,7 +449,7 @@ static void transfer(CLI *c) {
         if(err) {
             s_log(LOG_NOTICE,
                 "Error detected on SSL (read) file descriptor: %s (%d)",
-                my_strerror(err), err);
+                s_strerror(err), err);
             longjmp(c->err, 1);
         }
         if(c->ssl_wfd->fd != c->ssl_rfd->fd) { /* performance optimization */
@@ -461,7 +457,7 @@ static void transfer(CLI *c) {
             if(err) {
                 s_log(LOG_NOTICE,
                     "Error detected on SSL write file descriptor: %s (%d)",
-                    my_strerror(err), err);
+                    s_strerror(err), err);
                 longjmp(c->err, 1);
             }
         }
@@ -486,7 +482,7 @@ static void transfer(CLI *c) {
             if(err) { /* really an error? */
                 s_log(LOG_ERR, "INTERNAL ERROR: "
                     "Closed socket ready to read: %s (%d)",
-                    my_strerror(err), err);
+                    s_strerror(err), err);
                 longjmp(c->err, 1);
             }
             if(c->ssl_ptr) { /* anything left to write */
@@ -755,10 +751,6 @@ static void parse_socket_error(CLI *c, const char *text) {
 }
 
 static void print_cipher(CLI *c) { /* print negotiated cipher */
-#if SSLEAY_VERSION_NUMBER <= 0x0800
-    s_log(LOG_INFO, "Service %s opened with SSLv%d, cipher %s",
-        c->opt->servname, ssl->session->ssl_version, SSL_get_cipher(c->ssl));
-#else
     SSL_CIPHER *cipher;
     char buf[STRLEN], *i, *j;
 
@@ -779,7 +771,6 @@ static void print_cipher(CLI *c) { /* print negotiated cipher */
         }
     } while(*i++);
     s_log(LOG_INFO, "Negotiated ciphers: %s", buf);
-#endif
 }
 
 static void auth_user(CLI *c) {
@@ -872,7 +863,7 @@ static int connect_local(CLI *c) { /* spawn local process */
     if(c->opt->option.pty) {
         char tty[STRLEN];
 
-        if(pty_allocate(fd, fd+1, tty, STRLEN))
+        if(pty_allocate(fd, fd+1, tty))
             longjmp(c->err, 1);
         s_log(LOG_DEBUG, "TTY=%s allocated", tty);
     } else

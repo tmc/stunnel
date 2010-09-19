@@ -65,7 +65,7 @@ void s_poll_init(s_poll_set *fds) {
 }
 
 void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
-    int i;
+    unsigned int i;
 
     for(i=0; i<fds->nfds && fds->ufds[i].fd!=fd; i++)
         ;
@@ -86,7 +86,7 @@ void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
 }
 
 int s_poll_canread(s_poll_set *fds, int fd) {
-    int i;
+    unsigned int i;
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
@@ -95,7 +95,7 @@ int s_poll_canread(s_poll_set *fds, int fd) {
 }
 
 int s_poll_canwrite(s_poll_set *fds, int fd) {
-    int i;
+    unsigned int i;
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
@@ -104,7 +104,7 @@ int s_poll_canwrite(s_poll_set *fds, int fd) {
 }
 
 int s_poll_error(s_poll_set *fds, int fd) {
-    int i;
+    unsigned int i;
 
     for(i=0; i<fds->nfds; i++)
         if(fds->ufds[i].fd==fd)
@@ -298,9 +298,9 @@ void s_poll_init(s_poll_set *fds) {
 
 void s_poll_add(s_poll_set *fds, int fd, int rd, int wr) {
     if(rd)
-        FD_SET(fd, &fds->irfds);
+        FD_SET((unsigned int)fd, &fds->irfds);
     if(wr)
-        FD_SET(fd, &fds->iwfds);
+        FD_SET((unsigned int)fd, &fds->iwfds);
     if(fd>fds->max)
         fds->max=fd;
 }
@@ -589,7 +589,7 @@ int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
     error=get_last_socket_error();
     if(error!=EINPROGRESS && error!=EWOULDBLOCK) {
         s_log(LOG_ERR, "connect_blocking: connect %s: %s (%d)",
-            dst, my_strerror(error), error);
+            dst, s_strerror(error), error);
         return -1;
     }
 
@@ -601,7 +601,7 @@ int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
     case -1:
         error=get_last_socket_error();
         s_log(LOG_ERR, "connect_blocking: s_poll_wait %s: %s (%d)",
-            dst, my_strerror(error), error);
+            dst, s_strerror(error), error);
         return -1;
     case 0:
         s_log(LOG_ERR, "connect_blocking: s_poll_wait %s: timeout", dst);
@@ -613,7 +613,7 @@ int connect_blocking(CLI *c, SOCKADDR_UNION *addr, socklen_t addrlen) {
             error=get_socket_error(c->fd);
             if(error) { /* really an error? */
                 s_log(LOG_ERR, "connect_blocking: getsockopt %s: %s (%d)",
-                    dst, my_strerror(error), error);
+                    dst, s_strerror(error), error);
                 return -1;
             }
         }

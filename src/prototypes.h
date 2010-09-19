@@ -132,19 +132,14 @@ typedef struct service_options_struct {
     char *cipher_list;
     char *cert;                                             /* cert filename */
     char *key;                               /* pem (priv key/cert) filename */
-#ifdef USE_WIN32
-    char *cryptoapi_cert;                 /* Microsoft CryptoAPI certificate */
-#endif
     long session_timeout;
     int verify_level;
     int verify_use_only_my;
     int curve;
     long ssl_options;
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
     SOCKADDR_LIST ocsp_addr;
     char *ocsp_path;
     unsigned long ocsp_flags;
-#endif /* OpenSSL-0.9.7 */
     SSL_METHOD *client_method, *server_method;
     SOCKADDR_LIST sessiond_addr;
 
@@ -185,9 +180,7 @@ typedef struct service_options_struct {
         unsigned int pty:1;
         unsigned int transparent:1;
 #endif
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
         unsigned int ocsp:1;
-#endif
 #ifdef USE_LIBWRAP
         unsigned int libwrap:1;
 #endif
@@ -276,15 +269,15 @@ void s_log(int, const char *, ...)
 void ioerror(const char *);
 void sockerror(const char *);
 void log_error(int, int, const char *);
-char *my_strerror(int);
+char *s_strerror(int);
 
 /**************************************** prototypes for pty.c */
 
-int pty_allocate(int *, int *, char *, int);
+int pty_allocate(int *, int *, char *);
 
 /**************************************** prototypes for ssl.c */
 
-extern int cli_index, opt_index;;
+extern int cli_index, opt_index;
 
 void ssl_init(void);
 int ssl_configure(void);
@@ -293,11 +286,6 @@ char *open_engine(const char *);
 char *ctrl_engine(const char *, const char *);
 void close_engine(void);
 ENGINE *get_engine(int);
-#endif
-
-/**************************************** prototypes for cryptoapi.c */
-#ifdef USE_WIN32
-int SSL_CTX_use_CryptoAPI_certificate(SSL_CTX *, const char *);
 #endif
 
 /**************************************** prototypes for options.c */

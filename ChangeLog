@@ -1,6 +1,6 @@
 stunnel         Universal SSL tunnel
 
-Version 4.34, 2010.xx.xx, urgency: MEDIUM:
+Version 4.34, 2010.09.19, urgency: LOW:
 * New features
   - Updated Win32 DLLs for OpenSSL 1.0.0a.
   - Updated Win32 DLLs for zlib 1.2.5.
@@ -10,6 +10,7 @@ Version 4.34, 2010.xx.xx, urgency: MEDIUM:
   - DH support is now enabled by default.
   - Added support for OpenSSL builds with some algorithms disabled.
   - ./configure modified to support cross-compilation.
+  - Sample stunnel.init updated based on Debian init script.
 * Bugfixes
   - Implemented fixes in user interface to enter engine PIN.
   - Fixed a transfer() loop issue on socket errors.

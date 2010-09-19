@@ -512,8 +512,8 @@ static char *ntlm3(char *username, char *password, char *phase2) {
     char *decoded; /* decoded reply from proxy */
     char phase3[146];
     unsigned char md4_hash[21];
-    int userlen=strlen(username);
-    int phase3len=s_min(88+userlen, sizeof phase3);
+    unsigned int userlen=strlen(username);
+    unsigned int phase3len=s_min(88+userlen, sizeof phase3);
 
     /* setup phase3 structure */
     memset(phase3, 0, sizeof phase3);

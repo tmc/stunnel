@@ -369,9 +369,7 @@ extern char *sys_errlist[];
 #endif
 #endif /* HAVE_OSSL_ENGINE_H */
 
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
 #include <openssl/ocsp.h>
-#endif /* OpenSSL-0.9.7 */
 
 #ifdef USE_FIPS
 #include <openssl/fips.h>

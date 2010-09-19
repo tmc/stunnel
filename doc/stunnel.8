@@ -62,7 +62,7 @@
 .\" ========================================================================
 .\"
 .IX Title "STUNNEL 8"
-.TH STUNNEL 8 "2010.09.07" "4.34" "stunnel"
+.TH STUNNEL 8 "2010.09.15" "4.34" "stunnel"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -358,30 +358,6 @@ be named \s-1XXXXXXXX\s0.0 where \s-1XXXXXXXX\s0 is the hash value of the \s-1CR
 Certificate Revocation Lists file
 .Sp
 This file contains multiple CRLs, used with the \fIverify\fR.
-.IP "\fBcryptoapicert\fR selector (\s-1WIN32\s0 only)" 4
-.IX Item "cryptoapicert selector (WIN32 only)"
-Load the certificate and private key from the Windows Certificate System Store.
-Use this option instead of \fBcert\fR and \fBkey\fR.
-.Sp
-\&\fBcryptoapicert\fR makes it possible to use any smart card supported by Windows, but
-also any certificate that includes its private key.
-.Sp
-Selector formats:
-.Sp
-.Vb 2
-\&    SUBJ:<certificate substring to match>
-\&    THUMB:<certificate thumbprint hex value>
-.Ve
-.Sp
-The thumbprint hex string can easily be retrieved (copy-paste) from the Windows
-Certificate Store \s-1GUI\s0.
-.Sp
-Examples:
-.Sp
-.Vb 2
-\&    cryptoapicert = SUBJ:Peter Runestig
-\&    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28
-.Ve
 .IP "\fBcurve\fR = nid" 4
 .IX Item "curve = nid"
 specify \s-1ECDH\s0 curve name

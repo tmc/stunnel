@@ -62,7 +62,7 @@
 .\" ========================================================================
 .\"
 .IX Title "STUNNEL.PL 8"
-.TH STUNNEL.PL 8 "2010.09.07" "4.34" "stunnel"
+.TH STUNNEL.PL 8 "2010.09.15" "4.34" "stunnel"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -376,31 +376,6 @@ plik List Odwołanych Certyfikatów (\s-1CRL\s0)
 .Sp
 Opcja pozwala określić położenie pliku zawierającego listy \s-1CRL\s0 używane
 przez opcję \fIverify\fR.
-.IP "\fBcryptoapicert\fR selektor (\s-1WIN32\s0 only)" 4
-.IX Item "cryptoapicert selektor (WIN32 only)"
-Opcja pozwala odczytać certyfikat i odpowiadający mu klucz prywatny z Windows
-Certificate System Store.
-Można jej używać zamiast \fBcert\fR i \fBkey\fR.
-.Sp
-Opcja pozwala na używanie dowolnej karty inteligentnej wspieranej przez
-Windows jak również dowolnego certyfikatu zawierającego klucz prywatny.
-.Sp
-Formaty selektora:
-.Sp
-.Vb 2
-\&    SUBJ:<podciąg do którego dopasowany będzie posiadacz (podmiot) certyfikatu>
-\&    THUMB:<szesnastkowy skrót kryptograficzny certyfikatu>
-.Ve
-.Sp
-Skrót kryptograficzny certyfikatu może być łatwo uzyskany (skopiuj-wklej) z \s-1GUI\s0
-Windows Certificate Store.
-.Sp
-Examples:
-.Sp
-.Vb 2
-\&    cryptoapicert = SUBJ:Peter Runestig
-\&    cryptoapicert = THUMB:f6 49 24 41 01 b4 fb 44 0c ce f4 36 ae d0 c4 c9 df 7a b6 28
-.Ve
 .IP "\fBcurve\fR = nid" 4
 .IX Item "curve = nid"
 krzywa dla \s-1ECDH\s0

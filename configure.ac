@@ -17,7 +17,7 @@ AC_DEFINE_UNQUOTED(esc(OS_$host_os))
 
 AC_PROG_CC
 if test "$GCC" = "yes"
-then CFLAGS="$CFLAGS -Wall -Wshadow -Wcast-align -Wpointer-arith"
+then CFLAGS="$CFLAGS -Wall -Wextra -pedantic -Wno-long-long"
 fi
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET

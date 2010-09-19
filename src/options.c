@@ -83,7 +83,7 @@ static char *option_not_found=
 
 /**************************************** global options */
 
-static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
+static char *parse_global_option(CMD cmd, char *opt, char *arg) {
     char *tmpstr;
 #ifndef USE_WIN32
     struct group *gr;
@@ -161,11 +161,14 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
         break;
     }
 
-    /* EGD is only supported when compiled with OpenSSL 0.9.5a or later */
-#if SSLEAY_VERSION_NUMBER >= 0x0090581fL
+    /* EGD */
     switch(cmd) {
     case CMD_INIT:
+#ifdef EGD_SOCKET
+        new_global_options.egd_sock=EGD_SOCKET;
+#else
         new_global_options.egd_sock=NULL;
+#endif
         break;
     case CMD_EXEC:
         if(strcasecmp(opt, "EGD"))
@@ -181,7 +184,6 @@ static char *parse_global_option(CMD cmd, char *opt, char *arg, int reload) {
         s_log(LOG_NOTICE, "%-15s = path to Entropy Gathering Daemon socket", "EGD");
         break;
     }
-#endif /* OpenSSL 0.9.5a */
 
 #ifdef HAVE_OSSL_ENGINE_H
     /* engine */
@@ -749,25 +751,6 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         break;
     }
 
-    /* cryptoapicert */
-#ifdef USE_WIN32
-    switch(cmd) {
-    case CMD_INIT:
-        section->cryptoapi_cert=NULL;
-        break;
-    case CMD_EXEC:
-        if(strcasecmp(opt, "cryptoapicert"))
-            break;
-        section->cryptoapi_cert=stralloc(arg);
-        return NULL; /* OK */
-    case CMD_DEFAULT:
-        break;
-    case CMD_HELP:
-        s_log(LOG_NOTICE, "%-15s = certificate selector", "cryptoapicert");
-        break;
-    }
-#endif
-
     /* curve */
     switch(cmd) {
     case CMD_INIT:
@@ -987,7 +970,6 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         break;
     }
 
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
     /* OCSP */
     switch(cmd) {
     case CMD_INIT:
@@ -1026,7 +1008,6 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         s_log(LOG_NOTICE, "%-15s = OCSP server flags", "OCSPflag");
         break;
     }
-#endif /* OpenSSL-0.9.7 */
 
     /* options */
     switch(cmd) {
@@ -1508,7 +1489,7 @@ void parse_commandline(char *name, char *parameter) {
 #endif
 
     if(!strcasecmp(name, "-help")) {
-        parse_global_option(CMD_HELP, NULL, NULL, 0);
+        parse_global_option(CMD_HELP, NULL, NULL);
         parse_service_option(CMD_HELP, NULL, NULL, NULL);
         die(1);
     }
@@ -1516,7 +1497,7 @@ void parse_commandline(char *name, char *parameter) {
     if(!strcasecmp(name, "-version")) {
         stunnel_info(LOG_NOTICE);
         s_log(LOG_NOTICE, " ");
-        parse_global_option(CMD_DEFAULT, NULL, NULL, 0);
+        parse_global_option(CMD_DEFAULT, NULL, NULL);
         parse_service_option(CMD_DEFAULT, NULL, NULL, NULL);
         die(1);
     }
@@ -1534,6 +1515,8 @@ void parse_commandline(char *name, char *parameter) {
         }
         parse_conf(parameter, CONF_FD);
     } else
+#else
+    (void)parameter; /* skip warning about unused parameter */
 #endif
         parse_conf(name, CONF_FILE);
 }
@@ -1580,7 +1563,7 @@ void parse_conf(char *name, CONF_TYPE type) {
     memset(&new_service_options, 0, sizeof(SERVICE_OPTIONS)); /* reset local options */
     new_service_options.next=NULL;
     section=&new_service_options;
-    parse_global_option(CMD_INIT, NULL, NULL, type==CONF_RELOAD);
+    parse_global_option(CMD_INIT, NULL, NULL);
     parse_service_option(CMD_INIT, section, NULL, NULL);
     if(type!=CONF_RELOAD) { /* provide defaults for gui.c */
         memcpy(&global_options, &new_global_options, sizeof(GLOBAL_OPTIONS));
@@ -1647,7 +1630,7 @@ void parse_conf(char *name, CONF_TYPE type) {
             ++config_arg; /* remove initial whitespaces */
         errstr=parse_service_option(CMD_EXEC, section, config_opt, config_arg);
         if(section==&new_service_options && errstr==option_not_found)
-            errstr=parse_global_option(CMD_EXEC, config_opt, config_arg, type==CONF_RELOAD);
+            errstr=parse_global_option(CMD_EXEC, config_opt, config_arg);
         if(errstr) {
             config_error(line_number, line_text, errstr);
             file_close(df);
@@ -1699,11 +1682,7 @@ static int section_init(int prev_line, SERVICE_OPTIONS *section, int final) {
             return 1; /* OK */
     }
 
-    if(!section->option.client && !section->cert
-#ifdef USE_WIN32
-            && !section->cryptoapi_cert
-#endif
-            ) {
+    if(!section->option.client && !section->cert) {
         section_error(prev_line, "SSL server needs a certificate");
         return 0;
     }

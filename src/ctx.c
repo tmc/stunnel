@@ -73,11 +73,7 @@ static void cache_transfer(SSL_CTX *, const unsigned int, const unsigned,
     unsigned char **, unsigned int *);
 
 /* info callbacks */
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
 static void info_callback(const SSL *, int, int);
-#else /* OpenSSL-0.9.7 */
-static void info_callback(SSL *, int, int);
-#endif /* OpenSSL-0.9.7 */
 static void print_stats(SSL_CTX *);
 
 static void sslerror_queue(void);
@@ -133,10 +129,8 @@ int context_init(SERVICE_OPTIONS *section) { /* init SSL context */
             return 0;
         }
     }
-#if SSLEAY_VERSION_NUMBER >= 0x00906000L
     SSL_CTX_set_mode(section->ctx,
         SSL_MODE_ENABLE_PARTIAL_WRITE|SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
-#endif /* OpenSSL-0.9.6 */
 
     /* session cache */
     SSL_CTX_set_session_cache_mode(section->ctx, SSL_SESS_CACHE_BOTH);
@@ -151,17 +145,6 @@ int context_init(SERVICE_OPTIONS *section) { /* init SSL context */
     SSL_CTX_set_info_callback(section->ctx, info_callback);
 
     /* initialize certificate verification */
-#ifdef USE_WIN32
-    if(section->cryptoapi_cert) {
-        s_log(LOG_DEBUG, "Microsoft Certificate Store certificate: %s",
-            section->cryptoapi_cert);
-        if(!SSL_CTX_use_CryptoAPI_certificate(section->ctx,
-            section->cryptoapi_cert)) {
-            sslerror("SSL_CTX_use_CryptoAPI_certificate");
-            return 0;
-        }
-    } else
-#endif
     if(!load_pem_cert(section))
         return 0;
     if(!verify_init(section))
@@ -189,6 +172,8 @@ static RSA *tmp_rsa_cb(SSL *s, int export, int keylen) {
     time_t now;
     int i;
 
+    (void)s; /* skip warning about unused parameter */
+    (void)export; /* skip warning about unused parameter */
     enter_critical_section(CRIT_KEYGEN);
         /* only one make_temp_key() at a time */
     if(!initialized) {
@@ -227,11 +212,7 @@ static RSA *make_temp_key(int keylen) {
     RSA *result;
 
     s_log(LOG_DEBUG, "Generating %d bit temporary RSA key...", keylen);
-#if SSLEAY_VERSION_NUMBER >= 0x0900
     result=RSA_generate_key(keylen, RSA_F4, NULL, NULL);
-#else
-    result=RSA_generate_key(keylen, RSA_F4, NULL);
-#endif
     s_log(LOG_DEBUG, "Temporary RSA key created");
     return result;
 }
@@ -455,7 +436,8 @@ static void cache_transfer(SSL_CTX *ctx, const unsigned int type,
     char session_id_txt[2*SSL_MAX_SSL_SESSION_ID_LENGTH+1];
     const char hex[16]="0123456789ABCDEF";
     const char *type_description[]={"new", "get", "remove"};
-    int i, s, len;
+    unsigned int i;
+    int s, len;
     SOCKADDR_UNION addr;
     struct timeval t;
     CACHE_PACKET *packet;
@@ -546,7 +528,7 @@ static void cache_transfer(SSL_CTX *ctx, const unsigned int type,
     }
 
     /* parse results */
-    if(len<sizeof(CACHE_PACKET)-MAX_VAL_LEN || /* too short */
+    if(len<(int)sizeof(CACHE_PACKET)-MAX_VAL_LEN || /* too short */
             packet->version!=1 || /* wrong version */
             memcmp(packet->key, key, key_len)) { /* wrong session id */
         s_log(LOG_DEBUG, "cache_transfer: malformed packet received");
@@ -572,11 +554,7 @@ static void cache_transfer(SSL_CTX *ctx, const unsigned int type,
 
 /**************************************** informational callback */
 
-#if SSLEAY_VERSION_NUMBER >= 0x00907000L
 static void info_callback(const SSL *ssl, int where, int ret) {
-#else /* OpenSSL-0.9.7 */
-static void info_callback(SSL *ssl, int where, int ret) {
-#endif /* OpenSSL-0.9.7 */
     if(where & SSL_CB_LOOP)
         s_log(LOG_DEBUG, "SSL state (%s): %s",
         where & SSL_ST_CONNECT ? "connect" :
@@ -598,18 +576,14 @@ static void print_stats(SSL_CTX *ctx) { /* print statistics */
         SSL_CTX_sess_connect(ctx));
     s_log(LOG_DEBUG, "%4ld client connects that finished",
         SSL_CTX_sess_connect_good(ctx));
-#if SSLEAY_VERSION_NUMBER >= 0x0922
     s_log(LOG_DEBUG, "%4ld client renegotiations requested",
         SSL_CTX_sess_connect_renegotiate(ctx));
-#endif
     s_log(LOG_DEBUG, "%4ld server connects (SSL_accept())",
         SSL_CTX_sess_accept(ctx));
     s_log(LOG_DEBUG, "%4ld server connects that finished",
         SSL_CTX_sess_accept_good(ctx));
-#if SSLEAY_VERSION_NUMBER >= 0x0922
     s_log(LOG_DEBUG, "%4ld server renegotiations requested",
         SSL_CTX_sess_accept_renegotiate(ctx));
-#endif
     s_log(LOG_DEBUG, "%4ld session cache hits",
         SSL_CTX_sess_hits(ctx));
     s_log(LOG_DEBUG, "%4ld external session cache hits",
